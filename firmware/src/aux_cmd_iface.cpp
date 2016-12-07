@@ -196,7 +196,7 @@ public:
 
 void init()
 {
-    g_thread.start(NORMALPRIO - 5);
+    g_thread.start(LOWPRIO + 5);
 }
 
 }

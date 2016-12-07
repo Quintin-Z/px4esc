@@ -510,7 +510,7 @@ int main()
     /*
      * Confirming initialization
      */
-    chibios_rt::BaseThread::setPriority(LOWPRIO + 5);
+    chibios_rt::BaseThread::setPriority(LOWPRIO + 10);
 
     ::usleep(10000);
     foc::beep(8000.0F, 0.1F);

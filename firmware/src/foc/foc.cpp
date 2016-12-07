@@ -48,8 +48,6 @@ namespace
 
 chibios_rt::Mutex g_mutex;
 
-os::Logger g_logger("FOC");
-
 TaskContext g_context;
 
 board::motor::PWMHandle g_pwm_handle;
@@ -94,7 +92,12 @@ void init(const Parameters& params)
         g_task_handler.select<IdleTask>();
     }
 
-    IRQDebugOutputBuffer::addOutputCallback([](const char* s) { g_logger.println("IRQ: %s", s); });
+    IRQDebugOutputBuffer::addOutputCallback(
+        [](const char* s)
+        {
+            static os::Logger logger("FOC/IRQ");
+            logger.puts(s);
+        });
 
     DEBUG_LOG("FOC sizeof: %u %u %u %u\n",
               sizeof(g_task_handler), sizeof(MotorIdentificationTask), sizeof(g_context), sizeof(g_context.params));
@@ -103,7 +106,6 @@ void init(const Parameters& params)
 void poll()
 {
     os::MutexLocker ml(g_mutex);
-
     IRQDebugOutputBuffer::poll();
 }
 

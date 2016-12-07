@@ -44,6 +44,12 @@ namespace foc
 void init(const Parameters& params);
 
 /**
+ * Must be invoked periodically from a regular thread in order to let the FOC module process non-realtime tasks.
+ * Recommended period is about 10 milliseconds.
+ */
+void poll();
+
+/**
  * Allows to change configuration parameters at runtime.
  * The new parameters will take effect on next state switch (e.g. motor start/stop, identification, etc).
  */
@@ -179,11 +185,6 @@ void beep(Const frequency, Const duration);
  * Every event is output to the CLI by default, no need to add that handler explicitly.
  */
 void addLogSink(const std::function<void (const char*)>& sink);
-
-/**
- * If true, the FOC module will be printing lines formatted in a special way into stdout.
- */
-void setPlottingEnabled(bool en);
 
 /**
  * Named debug values.

@@ -27,6 +27,7 @@
 #include <math/math.hpp>
 #include <zubax_chibios/os.hpp>
 #include <zubax_chibios/util/heapless.hpp>
+#include <zubax_chibios/util/base64.hpp>
 #include <array>
 #include <functional>
 
@@ -168,58 +169,6 @@ public:
 
         DEBUG_LOG("COULD NOT INSTALL IRQ OUTPUT HANDLER\n");
         assert(false);
-    }
-};
-
-/**
- * Stores quickly changing IRQ values and prints them into stdout.
- */
-class IRQDebugPlotter
-{
-public:
-    static constexpr unsigned NumVariables = 8;
-
-private:
-    std::array<Scalar, NumVariables> vars_ = {};
-
-    mutable ::systime_t previous_time_systicks_ = 0;
-    mutable std::uint64_t absolute_time_systicks_ = 0;
-
-    Scalar getAbsoluteTimeInSeconds() const
-    {
-        // This is super wonky, should be improved someday
-        const auto delta = chVTTimeElapsedSinceX(previous_time_systicks_);
-        previous_time_systicks_ += delta;
-        absolute_time_systicks_ += delta;
-        return Scalar(absolute_time_systicks_) / Scalar(CH_CFG_ST_FREQUENCY);
-    }
-
-public:
-    template <typename Container>
-    void set(const Container cont)
-    {
-        std::copy_n(std::begin(cont), std::min(cont.size(), NumVariables), std::begin(vars_));
-    }
-
-    void print() const
-    {
-        std::array<Scalar, NumVariables> vars_copy;
-
-        {
-            AbsoluteCriticalSectionLocker locker;
-            vars_copy = vars_;
-        }
-
-        std::printf("$%.3f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
-                    double(getAbsoluteTimeInSeconds()),
-                    double(vars_copy[0]),
-                    double(vars_copy[1]),
-                    double(vars_copy[2]),
-                    double(vars_copy[3]),
-                    double(vars_copy[4]),
-                    double(vars_copy[5]),
-                    double(vars_copy[6]),
-                    double(vars_copy[7]));
     }
 };
 

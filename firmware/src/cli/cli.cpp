@@ -54,12 +54,13 @@ struct RAIIPlottingEnabler
 {
     RAIIPlottingEnabler(bool en = true)
     {
-        foc::setPlottingEnabled(en);
+        (void) en;
+        // TODO implement
     }
 
     ~RAIIPlottingEnabler()
     {
-        foc::setPlottingEnabled(false);
+        // TODO implement
     }
 };
 
@@ -933,7 +934,7 @@ class PlotCommand : public os::shell::ICommandHandler
     {
         if (argc <= 1)
         {
-            foc::setPlottingEnabled(false);
+            // TODO implement
             ios.print("Plotting stopped.\n"
                       "To start plotting:\n"
                       "\t%s on\n", argv[0]);
@@ -944,7 +945,7 @@ class PlotCommand : public os::shell::ICommandHandler
             {
                 ios.puts("Plotting now. Execute without arguments to stop.");
                 ::usleep(300000);
-                foc::setPlottingEnabled(true);
+                // TODO implement
             }
             else
             {

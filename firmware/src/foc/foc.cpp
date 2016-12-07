@@ -48,11 +48,11 @@ namespace
 
 chibios_rt::Mutex g_mutex;
 
+os::Logger g_logger("FOC");
+
 TaskContext g_context;
 
 board::motor::PWMHandle g_pwm_handle;
-
-IRQDebugPlotter g_debug_plotter;
 
 using motor_id::MotorIdentificationTask;
 using hw_test::HardwareTestingTask;
@@ -75,63 +75,6 @@ inline Scalar convertElectricalAngularVelocityToMechanicalRPM(Const eangvel)
                                                      g_context.params.motor.num_poles);
 }
 
-
-class Thread : public chibios_rt::BaseStaticThread<2048>
-{
-    static constexpr float WatchdogTimeout = 2.0F;
-
-    mutable os::watchdog::Timer watchdog_;
-
-    volatile bool plotting_enabled_ = false;
-
-    static os::Logger& getLogger()
-    {
-        static os::Logger logger("FOC");
-        return logger;
-    }
-
-    void main() override
-    {
-        watchdog_.startMSec(unsigned(WatchdogTimeout * 1e3F));
-
-        setName("foc_logger");
-
-        IRQDebugOutputBuffer::addOutputCallback([](const char* s) { getLogger().println("IRQ: %s", s); });
-
-        getLogger().puts("Started");
-
-        while (!os::isRebootRequested())
-        {
-            watchdog_.reset();
-
-            {
-                os::MutexLocker ml(g_mutex);
-
-                IRQDebugOutputBuffer::poll();
-
-                if (plotting_enabled_)
-                {
-                    g_debug_plotter.print();
-                }
-                else
-                {
-                    ::usleep(10000);
-                }
-            }
-        }
-
-        getLogger().puts("Goodbye");
-    }
-
-public:
-    virtual ~Thread() { }
-
-    void setPlottingEnabled(bool x)
-    {
-        plotting_enabled_ = x;
-    }
-} g_thread;
-
 } // namespace
 
 
@@ -151,10 +94,17 @@ void init(const Parameters& params)
         g_task_handler.select<IdleTask>();
     }
 
-    g_thread.start(LOWPRIO);
+    IRQDebugOutputBuffer::addOutputCallback([](const char* s) { g_logger.println("IRQ: %s", s); });
 
     DEBUG_LOG("FOC sizeof: %u %u %u %u\n",
               sizeof(g_task_handler), sizeof(MotorIdentificationTask), sizeof(g_context), sizeof(g_context.params));
+}
+
+void poll()
+{
+    os::MutexLocker ml(g_mutex);
+
+    IRQDebugOutputBuffer::poll();
 }
 
 void setParameters(const Parameters& params)
@@ -308,11 +258,6 @@ void addLogSink(const std::function<void (const char*)>& sink)
     IRQDebugOutputBuffer::addOutputCallback(sink);
 }
 
-void setPlottingEnabled(bool en)
-{
-    g_thread.setPlottingEnabled(en);
-}
-
 std::array<DebugKeyValueType, NumDebugKeyValuePairs> getDebugKeyValuePairs()
 {
     bool match = false;
@@ -403,15 +348,6 @@ void handleMainIRQ(Const period)
                     std::uint16_t((g_task_handler.getTaskID() << 12) | (result.exit_code & 0x0FFFU));
                 g_task_handler.select<FaultTask>(fault_code);
             }
-        }
-        else
-        {
-            std::array<Scalar, ITask::NumDebugVariables> vars;
-            {
-                AbsoluteCriticalSectionLocker locker;
-                vars = task.getDebugVariables();
-            }
-            g_debug_plotter.set(vars);
         }
     }
 }

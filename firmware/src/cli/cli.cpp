@@ -24,6 +24,7 @@
 
 #include "cli.hpp"
 #include "usb_cdc.hpp"
+#include "tracer.hpp"
 
 #include <board/board.hpp>
 #include <bootloader_interface/bootloader_interface.hpp>
@@ -38,7 +39,6 @@
 #include <foc/transforms.hpp>
 #include <motor_database/motor_database.hpp>
 #include <params.hpp>
-
 #include <cstdlib>
 #include <unistd.h>
 
@@ -50,19 +50,7 @@ namespace
 
 RebootRequestCallback g_reboot_request_callback;
 
-struct RAIIPlottingEnabler
-{
-    RAIIPlottingEnabler(bool en = true)
-    {
-        (void) en;
-        // TODO implement
-    }
-
-    ~RAIIPlottingEnabler()
-    {
-        // TODO implement
-    }
-};
+Tracer g_tracer;
 
 
 class RebootCommand : public os::shell::ICommandHandler
@@ -595,7 +583,7 @@ class SetpointCommand : public os::shell::ICommandHandler
 
         if (do_plot)
         {
-            RAIIPlottingEnabler enabler;
+            Tracer::RAIIEnabler enabler(g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "w"});
 
             ios.puts("PRESS ANY KEY TO STOP");
 
@@ -700,7 +688,7 @@ class MotorIdentificationCommand : public os::shell::ICommandHandler
             ;   // Clearing the input buffer
         }
 
-        RAIIPlottingEnabler plotting_enabler(do_plot);
+        Tracer::RAIIEnabler plotting_enabler(g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "w", "phi"});
 
         foc::beginMotorIdentification(mode);
 
@@ -826,7 +814,7 @@ class HardwareTestCommand : public os::shell::ICommandHandler
 
         if (do_plot)
         {
-            RAIIPlottingEnabler enabler;
+            Tracer::RAIIEnabler enabler(g_tracer, {"time", "Vinv", "Ia", "Ib", "PCGL"});
             while (foc::isHardwareTestInProgress())
             {
                 ::usleep(100000);
@@ -926,34 +914,54 @@ class MotorDatabaseCommand : public os::shell::ICommandHandler
 } static cmd_motor_database;
 
 
-class PlotCommand : public os::shell::ICommandHandler
+class TraceCommand : public os::shell::ICommandHandler
 {
-    const char* getName() const override { return "plot"; }
+    const char* getName() const override { return "trace"; }
 
     void execute(os::shell::BaseChannelWrapper& ios, int argc, char** argv) override
     {
         if (argc <= 1)
         {
-            // TODO implement
-            ios.print("Plotting stopped.\n"
-                      "To start plotting:\n"
-                      "\t%s on\n", argv[0]);
+            g_tracer.stop();
+            ios.print("Tracing stopped. To start tracing:\n"
+                      "\t%s [variable-name [variable-name [...]]]\n"
+                      "Execute without arguments to stop.\n", argv[0]);
+
+            ios.puts("Variables that are currently available for tracing:");
+
+            static constexpr unsigned MaxNames = 50;
+            variable_tracer::ShortName names[MaxNames];
+            const auto num_variables = variable_tracer::listProbeNames(std::begin(names), MaxNames);
+
+            for (unsigned i = 0; i < num_variables; i++)
+            {
+                ios.print("  %s", names[i].toString().c_str());
+            }
+            ios.puts("");
         }
         else
         {
-            if (os::heapless::String<30>(argv[1]).toLowerCase() == "on")
+            constexpr unsigned MaxNames = std::tuple_size<Tracer::NameList>::value;
+            const unsigned num_names = argc - 1;
+
+            if (num_names <= MaxNames)
             {
-                ios.puts("Plotting now. Execute without arguments to stop.");
-                ::usleep(300000);
-                // TODO implement
+                Tracer::NameList names;
+                auto it = names.begin();
+                for (int a = 1; a < argc; a++)
+                {
+                    *it++ = argv[a];
+                }
+
+                g_tracer.trace(names);
             }
             else
             {
-                ios.puts("ERROR: Invalid argument");
+                ios.print("ERROR: Too many names: %d provided, %d max\n", num_names, MaxNames);
             }
         }
     }
-} static cmd_plot;
+} static cmd_trace;
 
 
 class SystemInfoCommand : public os::shell::ICommandHandler
@@ -1138,7 +1146,7 @@ public:
         (void) shell_.addCommandHandler(&cmd_kv_convert);
         (void) shell_.addCommandHandler(&cmd_hardware_test);
         (void) shell_.addCommandHandler(&cmd_motor_database);
-        (void) shell_.addCommandHandler(&cmd_plot);
+        (void) shell_.addCommandHandler(&cmd_trace);
         (void) shell_.addCommandHandler(&cmd_sysinfo);
     }
 
@@ -1155,6 +1163,8 @@ void init(const RebootRequestCallback& reboot_callback)
     usb_cdc::init(board::readUniqueID());
 
     (void) g_cli_thread.start(LOWPRIO + 3);
+
+    g_tracer.init(NORMALPRIO - 10);
 }
 
 }

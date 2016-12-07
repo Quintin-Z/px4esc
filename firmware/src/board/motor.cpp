@@ -23,6 +23,7 @@
  */
 
 #include <board/board.hpp>
+#include <variable_tracer.hpp>
 #include <zubax_chibios/config/config.hpp>
 #include <unistd.h>
 #include <algorithm>
@@ -163,6 +164,14 @@ public:
 
 IRQTimingStatistics g_irq_timing_stat_fast;
 IRQTimingStatistics g_irq_timing_stat_main;
+
+/*
+ * Tracing probes
+ */
+variable_tracer::Probe probe_Vinv("Vinv", &g_inverter_voltage);
+
+variable_tracer::Probe probe_Ia("Ia", &g_phase_currents[0]);
+variable_tracer::Probe probe_Ib("Ib", &g_phase_currents[1]);
 
 
 void initPWM(const double pwm_frequency,

@@ -25,6 +25,7 @@
 #pragma once
 
 #include "motor.hpp"
+#include <variable_tracer.hpp>
 
 
 namespace board
@@ -109,6 +110,9 @@ class BoardFeatures final
 
     CurrentZeroOffsetCalibrator current_zero_offset_calibrator_;
 
+    // Tracing probes
+    variable_tracer::Probe probe_phase_current_gain_level_;
+
 
     const math::Vector<2>& getCurrentZeroOffsets() const
     {
@@ -163,7 +167,8 @@ class BoardFeatures final
 
 public:
     BoardFeatures() :
-        board_config_(detectBoardConfig())
+        board_config_(detectBoardConfig()),
+        probe_phase_current_gain_level_("PCGL", &current_amplifier_high_gain_selected_)
     {
         std::fill(current_zero_offsets_low_high_.begin(), current_zero_offsets_low_high_.end(),
                   math::Vector<2>::Ones() * (ADCReferenceVoltage * 0.5F));

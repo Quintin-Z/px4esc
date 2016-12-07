@@ -203,7 +203,7 @@ class FileDumpWriter(threading.Thread):
     def run(self):
         prev_ts = time.monotonic()
         while True:
-            x, values = self._q.get()
+            x, values, names = self._q.get()
             ts = time.monotonic()
             if (ts - prev_ts > 2) or not self._f:
                 if self._f:
@@ -211,10 +211,12 @@ class FileDumpWriter(threading.Thread):
                 self._f = open('latest_data.log', 'w', encoding='utf8')
                 self._f.write('Started at %.6f real, %.6f mono\n' % (time.time(), ts))
             prev_ts = ts
-            self._f.write('$%.6f,%s\n' % (x, ','.join(map(str, values))))
+            sample = dict(zip(names, values))
+            sample['time'] = x
+            self._f.write('%s\n' % sample)
 
-    def add(self, x, values):
-        self._q.put((x, values))
+    def add(self, x, values, names):
+        self._q.put((x, values, names))
 
 
 class SerialReader:
@@ -282,7 +284,7 @@ class CLIInputReader(threading.Thread):
 
 
 def value_handler(x, values, names):
-    dumper.add(x, values)
+    dumper.add(x, values, names)
     for val, name in zip(values, names):
         try:
             window.plot.update_values(name, [x], [val])

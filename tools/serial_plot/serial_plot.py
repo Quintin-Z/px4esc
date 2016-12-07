@@ -14,6 +14,7 @@ import time
 import serial
 import glob
 import queue
+import trace_decoder
 
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QApplication, QMainWindow, QAction
 from PyQt5.QtCore import Qt, QTimer
@@ -127,13 +128,13 @@ class RealtimePlotWidget(QWidget):
         if dt > 2:
             self._reset_required = True
 
-    def add_curve(self, curve_id, curve_name, data_x=[], data_y=[]):
+    def add_curve(self, curve_id, curve_name, data_x=None, data_y=None):
         color = QColor(self.COLORS[self._color_index % len(self.COLORS)])
         self._color_index += 1
         pen = mkPen(color, width=1)
         plot = self._plot_widget.plot(name=curve_name, pen=pen)
-        data_x = numpy.array(data_x)
-        data_y = numpy.array(data_y)
+        data_x = numpy.array(data_x if data_x is not None else [])
+        data_y = numpy.array(data_y if data_y is not None else [])
         self._curves[curve_id] = {'data': (data_x, data_y), 'plot': plot}
         self._trigger_auto_reset_if_needed()
 
@@ -217,19 +218,45 @@ class FileDumpWriter(threading.Thread):
 
 
 class SerialReader:
-    def __init__(self, port, baudrate, timeout=None, value_prefix='$'):
-        self._value_prefix = value_prefix
+    DEFAULT_SIZE_TO_FORMAT_MAP = {
+        1: trace_decoder.Fields.UINT8,
+        2: trace_decoder.Fields.UINT16,
+        4: trace_decoder.Fields.FLOAT32,
+        8: trace_decoder.Fields.FLOAT64
+    }
+
+    def __init__(self, port, baudrate, timeout=None):
         self._port = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, writeTimeout=timeout)
+        self._format = None
+        self._names = None
+        self._timestamp_index = 0
 
     def poll(self, value_handler, raw_handler):
         line = self._port.readline().decode()
-        if not line.startswith(self._value_prefix):
+        if not line.startswith('~'):
             raw_handler(line)
         else:
-            items = eval(line[len(self._value_prefix):])
-            if items and len(items) > 1:
-                timestamp, items = items[0], items[1:]
-                value_handler(timestamp, list(map(float, items)))
+            line = line[1:].rstrip()
+            if line[0] == '\t':
+                vs = [x.split('/') for x in line.split()]
+                self._names = [x[0] for x in vs]
+                self._timestamp_index = self._names.index('time')
+                del self._names[self._timestamp_index]
+                self._format = ''.join(self.DEFAULT_SIZE_TO_FORMAT_MAP[int(x[1])] for x in vs)
+                print(self._names, self._timestamp_index, self._format)
+            elif self._format is not None:
+                # Recovering the latest sample if multiple lines were erroneously joined together
+                line = line.split('~')[-1]
+                try:
+                    values = list(trace_decoder.decode_sample(self._format, line))
+                except Exception as ex:
+                    raise Exception('Sample decoding failed on %r (%s)' % (line, ex))
+                assert len(values) == len(self._names) + 1
+                ts = values[self._timestamp_index]
+                del values[self._timestamp_index]
+                value_handler(ts, values, self._names)
+            else:
+                pass    # We missed the sample format declaration, let's wait for the next one
 
     def run(self, value_handler, raw_handler):
         while True:
@@ -254,13 +281,13 @@ class CLIInputReader(threading.Thread):
                 print('CLI input poll failed:', ex)
 
 
-def value_handler(x, values):
+def value_handler(x, values, names):
     dumper.add(x, values)
-    for i, val in enumerate(values):
+    for val, name in zip(values, names):
         try:
-            window.plot.update_values(i, [x], [val])
+            window.plot.update_values(name, [x], [val])
         except KeyError:
-            window.plot.add_curve(i, str(i), [x], [val])
+            window.plot.add_curve(name, name, [x], [val])
 
 
 app = QApplication(sys.argv)

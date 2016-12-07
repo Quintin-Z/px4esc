@@ -362,11 +362,11 @@ public:
  *
  * @tparam MaxTracedVariables_       maximum number of variables that can be traced concurrently
  */
-template <unsigned MaxTracedVariables_ = 10>
+template <std::uint_fast8_t MaxTracedVariables_ = 10>
 class Tracer
 {
 public:
-    static constexpr unsigned MaxTracedVariables = MaxTracedVariables_;
+    static constexpr std::uint_fast8_t MaxTracedVariables = MaxTracedVariables_;
 
     static constexpr char VariableListSeparator = '\t';
     static constexpr char VariableNameSizeSeparator = '/';
@@ -383,6 +383,7 @@ private:
 
     std::array<ShortName, MaxTracedVariables> traced_names_;
     std::array<CacheEntry, MaxTracedVariables> cache_;
+    std::uint_fast8_t cache_size_ = 0;
     ProbeList::ModificationCountType var_list_mod_cnt_ = 0;
 
 
@@ -418,6 +419,7 @@ private:
 
     void rebuildCache()
     {
+        cache_size_ = 0;
         std::fill(cache_.begin(), cache_.end(), CacheEntry());
 
         markCacheValid();       // Cache may be invalidated in the process, which is fine - we'll try again next time
@@ -434,6 +436,7 @@ private:
             if (loc_size.first != nullptr && loc_size.second > 0)
             {
                 *out++ = {n, loc_size.first, loc_size.second};
+                cache_size_++;
             }
         }
     }
@@ -450,14 +453,13 @@ private:
             CriticalSectionLocker locker;
             if (isCacheStillValid())
             {
-                for (auto& x : cache_)      // On small embedded targets, unrolling this should make it faster
+                // On small embedded targets, unrolling this should make it faster
+                for (std::uint_fast8_t i = 0; i < cache_size_; i++)
                 {
-                    if (x.isEmpty())
-                    {
-                        break;
-                    }
-                    (void) std::memcpy(data_write_ptr + offset, const_cast<const void*>(x.location), x.size);
-                    offset += x.size;
+                    (void) std::memcpy(data_write_ptr + offset,
+                                       const_cast<const void*>(cache_[i].location),
+                                       cache_[i].size);
+                    offset += cache_[i].size;
                 }
             }
         }
@@ -469,12 +471,10 @@ private:
     {
         char* op = output_ptr;
 
-        for (auto& x : cache_)
+        for (std::uint_fast8_t i = 0; i < cache_size_; i++)
         {
-            if (x.isEmpty())
-            {
-                break;
-            }
+            const auto& x = cache_[i];
+            assert(!x.isEmpty());
 
             *op++ = VariableListSeparator;
 

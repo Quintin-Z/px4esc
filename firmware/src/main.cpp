@@ -552,6 +552,8 @@ int main()
         app::updateUAVCANNodeStatus(board_health.first,
                                     board_health.second);
 
+        foc::poll();
+
         next_step_at += MS2ST(LoopPeriodMSec);
         os::sleepUntilChTime(next_step_at);
     }

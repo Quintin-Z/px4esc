@@ -103,6 +103,7 @@ os::config::Param<float> g_config_pwm_dead_time_nsec("drv.pwm_deadt_ns", 0.0F, 0
 PWMParameters g_pwm_params;
 
 unsigned g_fast_irq_to_main_irq_period_ratio;
+float g_main_irq_period;
 
 math::Vector<2> g_phase_currents = math::Vector<2>::Zero();     ///< Most recent phase currents measurement
 
@@ -605,6 +606,7 @@ void init()
     g_pwm_params.upper_limit = 1.0F - (adc_sampling_window + g_pwm_params.dead_time) / g_pwm_params.period;
 
     g_fast_irq_to_main_irq_period_ratio = unsigned(std::ceil(MainIRQMinPeriod / g_pwm_params.period) + 0.4F);
+    g_main_irq_period = g_pwm_params.period * float(g_fast_irq_to_main_irq_period_ratio);
 
     initADC();
 
@@ -619,7 +621,7 @@ void init()
 
     g_logger.println("Fast IRQ period: %g us, Main IRQ period: %g us, ratio %u; PWM limit: %0.3f",
                      double(g_pwm_params.period) * 1e6,
-                     double(g_pwm_params.period) * double(g_fast_irq_to_main_irq_period_ratio) * 1e6,
+                     double(g_main_irq_period) * 1e6,
                      g_fast_irq_to_main_irq_period_ratio,
                      double(g_pwm_params.upper_limit));
 }
@@ -923,8 +925,20 @@ CH_FAST_IRQ_HANDLER(STM32_TIM8_CC_HANDLER)
 
     board::RAIIToggler<board::setTestPointA> tp_toggler;
 
-    const float period = g_pwm_params.period * float(g_fast_irq_to_main_irq_period_ratio);
-    handleMainIRQ(period);
+    {
+        /*
+         * Look me in the eye and tell me it's ugly. Is it ugly?! Yes, of course it is...
+         * We'll probably need to find a better way to provide accurate time for the tracing module.
+         * Besides, the current approach breaks when the driver is suspend()'ed, because IRQ don't fire.
+         */
+        static std::uint64_t irq_counter;
+        static double current_time;
+        static const variable_tracer::Probe probe_time("time", &current_time);
+
+        current_time = double(irq_counter++) * double(g_main_irq_period);   // Float won't work here, too large numbers
+    }
+
+    handleMainIRQ(g_main_irq_period);
 
     /*
      * Temperature processing.
@@ -941,7 +955,7 @@ CH_FAST_IRQ_HANDLER(STM32_TIM8_CC_HANDLER)
 #if DEBUG_BUILD
     {
         const float elapsed = time_stat_updater.getElapsedTime();
-        const float limit = period * 1.5F;
+        const float limit = g_main_irq_period * 1.5F;
         if (elapsed > limit)
         {
             chibios_rt::System::halt(os::heapless::concatenate(

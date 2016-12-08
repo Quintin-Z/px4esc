@@ -55,8 +55,28 @@ class Tracer : private chibios_rt::BaseStaticThread<512>
     {
         setName("tracer");
 
+        auto last_loop_systime = chVTGetSystemTimeX();
+
         while (!os::isRebootRequested())
         {
+            /*
+             * Sleeping for minimum possible time interval in order to avoid buffer congestion and over-sampling.
+             * Ideally, the duration of the pause should be about 100~200 microseconds, but the scheduler has to
+             * round up the intervals to the tick period.
+             */
+            {
+                const auto new_systime = chVTGetSystemTimeX();
+                if (last_loop_systime == new_systime)
+                {
+                    chThdSleep(1);          // Enforcing about one sample per OS tick
+                    last_loop_systime++;
+                }
+                else
+                {
+                    last_loop_systime = new_systime;
+                }
+            }
+
             std::pair<unsigned, Impl::SampleResult> result;
 
             {
@@ -76,10 +96,10 @@ class Tracer : private chibios_rt::BaseStaticThread<512>
 
                 os::MutexLocker stdio_locker(os::getStdIOMutex());
 
-                chnWriteTimeout(os::getStdIOStream(),
-                                reinterpret_cast<const std::uint8_t*>(&output_buffer_[0]),
-                                result.first + 3,
-                                MS2ST(WriteTimeoutMSec));
+                (void) chnWriteTimeout(os::getStdIOStream(),
+                                       reinterpret_cast<const std::uint8_t*>(&output_buffer_[0]),
+                                       result.first + 3,
+                                       MS2ST(WriteTimeoutMSec));
             }
         }
     }
@@ -102,6 +122,8 @@ public:
             target.stop();
         }
     };
+
+    virtual ~Tracer() { }
 
     void init(const ::tprio_t thread_priority)
     {

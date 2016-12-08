@@ -68,7 +68,7 @@
  *
  * Read the discussion here: http://www.chibios.com/forum/viewtopic.php?f=3&t=3651
  */
-#define CH_CFG_ST_FREQUENCY             1000
+#define CH_CFG_ST_FREQUENCY             4000
 #define CH_CFG_ST_TIMEDELTA             0
 
 #define PORT_INT_REQUIRED_STACK         4096

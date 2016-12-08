@@ -51,7 +51,8 @@
 #define SERIAL_DEFAULT_BITRATE      115200
 #define SERIAL_BUFFERS_SIZE         512
 
-#define SERIAL_USB_BUFFERS_SIZE     128
-#define SERIAL_USB_BUFFERS_NUMBER   8
+// Tests show that 2 large buffers enable higher throughput than multiple small buffers
+#define SERIAL_USB_BUFFERS_SIZE     2048
+#define SERIAL_USB_BUFFERS_NUMBER   2
 
 #include <zubax_chibios/sys/halconf_tail.h>

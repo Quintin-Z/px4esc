@@ -190,6 +190,8 @@ void addLogSink(const std::function<void (const char*)>& sink);
  * Named debug values.
  * This is suitable for e.g. reporting via UAVCAN.
  * Key length is guaranteed to never exceed 3 ASCII characters (3 bytes).
+ *
+ * TODO: This should be removed in favor of the variable tracing facility.
  */
 using DebugKeyValueType = std::pair<os::heapless::String<3>, Scalar>;
 constexpr unsigned NumDebugKeyValuePairs = 4;

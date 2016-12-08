@@ -1164,7 +1164,11 @@ void init(const RebootRequestCallback& reboot_callback)
 
     (void) g_cli_thread.start(LOWPRIO + 3);
 
-    g_tracer.init(NORMALPRIO - 10);
+    /*
+     * It is important to give the USB driver thread a higher priority level, oterwise it won't be able to
+     * push data into the interface in real time.
+     */
+    g_tracer.init(STM32_USB_OTG_THREAD_PRIO - 1);
 }
 
 }

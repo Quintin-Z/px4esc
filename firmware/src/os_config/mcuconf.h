@@ -117,11 +117,14 @@
 
 /*
  * USB driver system settings.
+ * Note that the USB thread is doing exactly nothing unless USB is connected,
+ * so it is safe to assign a very high priority here.
+ * High priority is required for the real-time variable tracer.
  */
 #define STM32_USB_USE_OTG1                  TRUE
 #define STM32_USB_OTG1_IRQ_PRIORITY         5
 #define STM32_USB_OTG1_RX_FIFO_SIZE         512
-#define STM32_USB_OTG_THREAD_PRIO           (LOWPRIO + 1)
+#define STM32_USB_OTG_THREAD_PRIO           (NORMALPRIO + 20)
 #define STM32_USB_OTG_THREAD_STACK_SIZE     256
 #define STM32_USB_OTGFIFO_FILL_BASEPRI      0
 

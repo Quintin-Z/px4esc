@@ -49,7 +49,7 @@ namespace
  */
 static constexpr unsigned MemoryPoolSize = 8192;
 static constexpr unsigned RxQueueDepth = 254;           ///< Can be safely reduced if we're tight on memory
-static constexpr unsigned NodeThreadPriority = (HIGHPRIO + NORMALPRIO) / 2;
+static constexpr unsigned NodeThreadPriority = NORMALPRIO;
 static constexpr unsigned FixedBitrateInitTimeoutSec = 10;
 
 /**

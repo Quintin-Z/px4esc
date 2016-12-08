@@ -818,6 +818,19 @@ CH_FAST_IRQ_HANDLER(STM32_ADC_HANDLER)
 
     board::RAIIToggler<board::setTestPointB> tp_toggler;
 
+    {
+        /*
+         * Look me in the eye and tell me it's ugly. Is it ugly?! Yes, of course it is...
+         * We'll probably need to find a better way to provide accurate time for the tracing module.
+         * Besides, the current approach breaks when the driver is suspend()'ed, because IRQ don't fire.
+         */
+        static std::uint64_t irq_counter;
+        static double current_time;
+        static const variable_tracer::Probe probe_time("time", &current_time);
+
+        current_time = double(irq_counter++) * double(g_pwm_params.period); // Float won't work here, too large numbers
+    }
+
     /*
      * By the time we get here, the DMA controller should have completed all transfers.
      * Making sure this assumption is true.
@@ -924,19 +937,6 @@ CH_FAST_IRQ_HANDLER(STM32_TIM8_CC_HANDLER)
     IRQTimingStatistics::RAIIUpdater time_stat_updater(g_irq_timing_stat_main);
 
     board::RAIIToggler<board::setTestPointA> tp_toggler;
-
-    {
-        /*
-         * Look me in the eye and tell me it's ugly. Is it ugly?! Yes, of course it is...
-         * We'll probably need to find a better way to provide accurate time for the tracing module.
-         * Besides, the current approach breaks when the driver is suspend()'ed, because IRQ don't fire.
-         */
-        static std::uint64_t irq_counter;
-        static double current_time;
-        static const variable_tracer::Probe probe_time("time", &current_time);
-
-        current_time = double(irq_counter++) * double(g_main_irq_period);   // Float won't work here, too large numbers
-    }
 
     handleMainIRQ(g_main_irq_period);
 

@@ -73,11 +73,7 @@ class InductanceTask : public ISubTask
 
     Scalar angular_position_ = 0;
 
-    variable_tracer::Probe probe_Ud_;
-    variable_tracer::Probe probe_Uq_;
-    variable_tracer::Probe probe_Id_;
-    variable_tracer::Probe probe_Iq_;
-    variable_tracer::Probe probe_Udq_normalization_counter_;
+    variable_tracer::ProbeGroup<5> probes_;
 
 public:
     InductanceTask(SubTaskContextReference context,
@@ -93,12 +89,11 @@ public:
                   context.board.pwm,
                   Modulator::DeadTimeCompensationPolicy::Disabled,
                   Modulator::CrossCouplingCompensationPolicy::Disabled),
-
-        probe_Ud_("Ud", &last_modulator_output_.reference_Udq[0]),
-        probe_Uq_("Uq", &last_modulator_output_.reference_Udq[1]),
-        probe_Id_("Id", &last_modulator_output_.Idq[0]),
-        probe_Iq_("Iq", &last_modulator_output_.Idq[1]),
-        probe_Udq_normalization_counter_("VMNC", &modulator_.getUdqNormalizationCounter())
+        probes_("Ud",   &last_modulator_output_.reference_Udq[0],
+                "Uq",   &last_modulator_output_.reference_Udq[1],
+                "Id",   &last_modulator_output_.Idq[0],
+                "Iq",   &last_modulator_output_.Idq[1],
+                "VMNC", &modulator_.getUdqNormalizationCounter())
     {
        result_.lq = 0;
 

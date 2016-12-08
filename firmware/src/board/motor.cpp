@@ -169,10 +169,9 @@ IRQTimingStatistics g_irq_timing_stat_main;
 /*
  * Tracing probes
  */
-variable_tracer::Probe probe_Vinv("Vinv", &g_inverter_voltage);
-
-variable_tracer::Probe probe_Ia("Ia", &g_phase_currents[0]);
-variable_tracer::Probe probe_Ib("Ib", &g_phase_currents[1]);
+variable_tracer::ProbeGroup<3> g_probes("Vinv", &g_inverter_voltage,
+                                        "Ia",   &g_phase_currents[0],
+                                        "Ib",   &g_phase_currents[1]);
 
 
 void initPWM(const double pwm_frequency,

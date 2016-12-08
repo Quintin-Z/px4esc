@@ -56,8 +56,8 @@ Observer::Observer(const Parameters& parameters,
     // Filter state
     P_(parameters.P0),
 
-    probe_estimated_Id_("oId", &x_[0]),
-    probe_estimated_Iq_("oIq", &x_[1])
+    probes_("oId", &x_[0],
+            "oIq", &x_[1])
 {
     assert(std::isfinite(phi_));
     assert(std::isfinite(ld_));

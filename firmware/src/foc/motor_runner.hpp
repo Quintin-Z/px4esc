@@ -96,12 +96,7 @@ private:
     mutable Vector<2> Idq_ = Vector<2>::Zero();
     mutable Vector<2> reference_Udq_ = Vector<2>::Zero();
 
-    variable_tracer::Probe probe_Id_;
-    variable_tracer::Probe probe_Iq_;
-    variable_tracer::Probe probe_reference_Ud_;
-    variable_tracer::Probe probe_reference_Uq_;
-    variable_tracer::Probe probe_angular_velocity_;
-    variable_tracer::Probe probe_setpoint_;
+    variable_tracer::ProbeGroup<6> probes_;
 
 
     bool isReversed() const { return direction_ == Direction::Reverse; }
@@ -132,12 +127,12 @@ public:
                        modulator_.CrossCouplingCompensationPolicy::Enabled :
                        modulator_.CrossCouplingCompensationPolicy::Disabled),
 
-        probe_Id_("Id", &Idq_[0]),
-        probe_Iq_("Iq", &Idq_[1]),
-        probe_reference_Ud_("Ud", &reference_Udq_[0]),
-        probe_reference_Uq_("Uq", &reference_Udq_[1]),
-        probe_angular_velocity_("AVel", &angular_velocity_),
-        probe_setpoint_("SP", &regular_setpoint_.value)
+        probes_("Id",   &Idq_[0],
+                "Iq",   &Idq_[1],
+                "Ud",   &reference_Udq_[0],
+                "Uq",   &reference_Udq_[1],
+                "AVel", &angular_velocity_,
+                "SP",   &regular_setpoint_.value)
     { }
 
     /**

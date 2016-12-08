@@ -261,6 +261,75 @@ inline void ProbeList::remove(const Probe* const node)
 }
 
 /**
+ * A helper class that contains a collection of probes.
+ * @tparam NumProbes    number of probes in the collection
+ */
+template <unsigned NumProbes>
+class ProbeGroup
+{
+    ProbeGroup(ProbeGroup&) = delete;
+    ProbeGroup(ProbeGroup&&) = delete;
+    void operator=(ProbeGroup&) = delete;
+    void operator=(ProbeGroup&&) = delete;
+
+    class AllocationSpace
+    {
+        AllocationSpace(AllocationSpace&) = delete;
+        AllocationSpace(AllocationSpace&&) = delete;
+        void operator=(AllocationSpace&) = delete;
+        void operator=(AllocationSpace&&) = delete;
+
+        alignas(Probe) std::uint8_t buffer_[sizeof(Probe)];
+
+    public:
+        AllocationSpace() noexcept { }
+
+        ~AllocationSpace() noexcept
+        {
+            reinterpret_cast<Probe*>(&buffer_[0])->~Probe();
+        }
+
+        template <typename T>
+        void construct(const char* const name,
+                       const volatile T* const location) noexcept
+        {
+            (void) new (reinterpret_cast<void*>(&buffer_[0])) Probe(name, location);
+        }
+    };
+
+    AllocationSpace storage_[NumProbes];
+
+    template <unsigned Index, typename T>
+    void unwind(const char* const name, const volatile T* location) noexcept
+    {
+        static_assert(Index < NumProbes, "Too many arguments");
+        storage_[Index].construct(name, location);
+    }
+
+    template <unsigned Index, typename T, typename... Arguments>
+    void unwind(const char* const name, const volatile T* location, Arguments... tail) noexcept
+    {
+        static_assert(Index < NumProbes, "Too many arguments");
+        storage_[Index].construct(name, location);
+        unwind<Index + 1>(std::forward<Arguments>(tail)...);
+    }
+
+public:
+    /**
+     * Accepts a list of arguments containing alternating names and pointers to the traced variables.
+     * Example:
+     *   ProbeGroup<2> probe_group("A", &a, "B", &b);
+     */
+    template <typename... Arguments>
+    ProbeGroup(Arguments... tail) noexcept
+    {
+        static_assert((NumProbes * 2) == sizeof...(Arguments),
+                      "Number of arguments does not match the number of probes");
+        unwind<0>(std::forward<Arguments>(tail)...);
+    }
+};
+
+/**
  * A simple binary-to-text encoder algorithm.
  * This algorithm is based on Z85, which in turn is based on Base85. The difference from Z85 is that the byte order
  * is not enforced - a little-endian system will encode data in little-endian format, and a big-endian system will

@@ -64,6 +64,13 @@ class FluxLinkageTask : public ISubTask
     Vector<2> Udq_ = Vector<2>::Zero();
     Scalar phi_ = 0;
 
+    variable_tracer::Probe probe_Ud_;
+    variable_tracer::Probe probe_Uq_;
+    variable_tracer::Probe probe_Id_;
+    variable_tracer::Probe probe_Iq_;
+    variable_tracer::Probe probe_angular_velocity_;
+    variable_tracer::Probe probe_phi_;
+
 public:
     FluxLinkageTask(SubTaskContextReference context,
                     const MotorParameters& initial_parameters) :
@@ -79,7 +86,14 @@ public:
                    Modulator::DeadTimeCompensationPolicy::Disabled,
                    Modulator::CrossCouplingCompensationPolicy::Disabled),
         currents_filter_(Vector<2>::Zero()),
-        Ud_filter_(0.0F)
+        Ud_filter_(0.0F),
+
+        probe_Ud_("Ud", &Udq_[0]),
+        probe_Uq_("Uq", &Udq_[1]),
+        probe_Id_("Id", &Idq_[0]),
+        probe_Iq_("Iq", &Idq_[1]),
+        probe_angular_velocity_("AVel", &angular_velocity_),
+        probe_phi_("phi", &phi_)
     {
         Udq_[1] = initial_Uq_;
 
@@ -94,18 +108,7 @@ public:
         }
     }
 
-    void onMainIRQ(Const period, const board::motor::Status&) override
-    {
-        (void) period;
-        context_.reportDebugVariables({
-            Udq_[0],
-            Udq_[1],
-            Idq_[0],
-            Idq_[1],
-            angular_velocity_,
-            phi_ * 1e3F
-        });
-    }
+    void onMainIRQ(Const, const board::motor::Status&) override { }
 
     void onNextPWMPeriod(const Vector<2>& phase_currents_ab, Const inverter_voltage) override
     {

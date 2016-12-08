@@ -26,6 +26,7 @@
 
 #include "parameters.hpp"
 #include "hw_test/report.hpp"
+#include <variable_tracer.hpp>
 #include <math/math.hpp>
 #include <board/motor.hpp>
 #include <cassert>
@@ -143,14 +144,6 @@ public:
     virtual void applyResultToGlobalContext(TaskContext& inout_context) const
     {
         (void) inout_context;
-    }
-
-    /**
-     * Returned values will be transferred over to the real time plotting logic.
-     */
-    virtual std::array<Scalar, NumDebugVariables> getDebugVariables() const
-    {
-        return {};
     }
 };
 

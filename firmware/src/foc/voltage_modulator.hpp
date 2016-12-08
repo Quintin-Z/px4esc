@@ -241,7 +241,7 @@ public:
         return out;
     }
 
-    std::uint64_t getUdqNormalizationCounter() const { return Udq_normalization_count_; }
+    const std::uint64_t& getUdqNormalizationCounter() const { return Udq_normalization_count_; }
 };
 
 }

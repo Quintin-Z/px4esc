@@ -96,6 +96,13 @@ private:
     mutable Vector<2> Idq_ = Vector<2>::Zero();
     mutable Vector<2> reference_Udq_ = Vector<2>::Zero();
 
+    variable_tracer::Probe probe_Id_;
+    variable_tracer::Probe probe_Iq_;
+    variable_tracer::Probe probe_reference_Ud_;
+    variable_tracer::Probe probe_reference_Uq_;
+    variable_tracer::Probe probe_angular_velocity_;
+    variable_tracer::Probe probe_setpoint_;
+
 
     bool isReversed() const { return direction_ == Direction::Reverse; }
 
@@ -123,7 +130,14 @@ public:
                    modulator_.DeadTimeCompensationPolicy::Disabled,
                    controller_params.voltage_modulator_cross_coupling_inductance_compensation ?
                        modulator_.CrossCouplingCompensationPolicy::Enabled :
-                       modulator_.CrossCouplingCompensationPolicy::Disabled)
+                       modulator_.CrossCouplingCompensationPolicy::Disabled),
+
+        probe_Id_("Id", &Idq_[0]),
+        probe_Iq_("Iq", &Idq_[1]),
+        probe_reference_Ud_("Ud", &reference_Udq_[0]),
+        probe_reference_Uq_("Uq", &reference_Udq_[1]),
+        probe_angular_velocity_("AVel", &angular_velocity_),
+        probe_setpoint_("SP", &regular_setpoint_.value)
     { }
 
     /**
@@ -300,30 +314,6 @@ public:
     }
 
     Direction getDirection() const { return direction_; }
-
-    DebugVariables getDebugVariables() const
-    {
-        AbsoluteCriticalSectionLocker locker;
-        const auto estimated_Idq = observer_.getIdq();
-        return {
-            reference_Udq_[0],
-            reference_Udq_[1],
-            Idq_[0],
-            Idq_[1],
-            estimated_Idq[0],
-            estimated_Idq[1],
-            observer_.getAngularVelocity() * 1e-3F      // Krad/sec
-        };
-    }
-
-    /**
-     * Returns a MUTABLE REFERENCE to the observer object.
-     * This is PRONE TO RACE CONDITIONS, make sure you know what you're doing.
-     */
-    observer::Observer& getObserver()
-    {
-        return observer_;
-    }
 };
 
 }

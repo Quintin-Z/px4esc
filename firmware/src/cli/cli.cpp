@@ -34,6 +34,7 @@
 #include <zubax_chibios/config/config.hpp>
 #include <zubax_chibios/util/shell.hpp>
 #include <zubax_chibios/util/base64.hpp>
+#include <zubax_chibios/util/helpers.hpp>
 
 #include <foc/foc.hpp>
 #include <foc/transforms.hpp>
@@ -583,7 +584,7 @@ class SetpointCommand : public os::shell::ICommandHandler
 
         if (do_plot)
         {
-            Tracer::RAIIEnabler enabler(g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "w"});
+            Tracer::RAIIEnabler enabler(g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "AVel"});
 
             ios.puts("PRESS ANY KEY TO STOP");
 
@@ -688,7 +689,12 @@ class MotorIdentificationCommand : public os::shell::ICommandHandler
             ;   // Clearing the input buffer
         }
 
-        Tracer::RAIIEnabler plotting_enabler(g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "w", "phi"});
+        os::helpers::LazyConstructor<Tracer::RAIIEnabler> plotting_enabler;
+        if (do_plot)
+        {
+            plotting_enabler.construct<Tracer&, const Tracer::NameList&>(
+                g_tracer, {"time", "Ud", "Uq", "Id", "Iq", "AVel", "phi"});
+        }
 
         foc::beginMotorIdentification(mode);
 

@@ -414,24 +414,6 @@ public:
         }
     }
 
-    std::array<Scalar, NumDebugVariables> getDebugVariables() const override
-    {
-        std::array<Scalar, NumDebugVariables> out{};
-
-        {
-            AbsoluteCriticalSectionLocker locker;
-            if (runner_.isConstructed())
-            {
-                const auto vals = runner_->getDebugVariables();
-                std::copy(vals.begin(), vals.end(), out.begin());
-            }
-        }
-
-        out.back() = board::motor::getInverterVoltage();
-
-        return out;
-    }
-
     bool isSpinupInProgress() const
     {
         AbsoluteCriticalSectionLocker locker;

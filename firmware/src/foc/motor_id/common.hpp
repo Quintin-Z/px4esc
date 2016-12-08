@@ -46,8 +46,6 @@ struct SubTaskContext : public TaskContext
 
     virtual void setPWM(const Vector<3>& pwm) = 0;
 
-    virtual void reportDebugVariables(const std::initializer_list<Scalar>& variables) = 0;
-
     /**
      * Returns monotonic time of constant rate but unknown phase.
      */

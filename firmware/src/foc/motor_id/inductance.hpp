@@ -73,6 +73,12 @@ class InductanceTask : public ISubTask
 
     Scalar angular_position_ = 0;
 
+    variable_tracer::Probe probe_Ud_;
+    variable_tracer::Probe probe_Uq_;
+    variable_tracer::Probe probe_Id_;
+    variable_tracer::Probe probe_Iq_;
+    variable_tracer::Probe probe_Udq_normalization_counter_;
+
 public:
     InductanceTask(SubTaskContextReference context,
                    const MotorParameters& initial_parameters) :
@@ -86,7 +92,13 @@ public:
                   context.params.controller.voltage_modulator_bandwidth,
                   context.board.pwm,
                   Modulator::DeadTimeCompensationPolicy::Disabled,
-                  Modulator::CrossCouplingCompensationPolicy::Disabled)
+                  Modulator::CrossCouplingCompensationPolicy::Disabled),
+
+        probe_Ud_("Ud", &last_modulator_output_.reference_Udq[0]),
+        probe_Uq_("Uq", &last_modulator_output_.reference_Udq[1]),
+        probe_Id_("Id", &last_modulator_output_.Idq[0]),
+        probe_Iq_("Iq", &last_modulator_output_.Idq[1]),
+        probe_Udq_normalization_counter_("VMNC", &modulator_.getUdqNormalizationCounter())
     {
        result_.lq = 0;
 
@@ -98,18 +110,7 @@ public:
        }
     }
 
-    void onMainIRQ(Const period, const board::motor::Status&) override
-    {
-        (void) period;
-        AbsoluteCriticalSectionLocker locker;
-        context_.reportDebugVariables({
-            last_modulator_output_.reference_Udq[0],
-            last_modulator_output_.reference_Udq[1],
-            last_modulator_output_.Idq[0],
-            last_modulator_output_.Idq[1],
-            Scalar(modulator_.getUdqNormalizationCounter())
-        });
-    }
+    void onMainIRQ(Const, const board::motor::Status&) override { }
 
     void onNextPWMPeriod(const Vector<2>& phase_currents_ab, Const inverter_voltage) override
     {

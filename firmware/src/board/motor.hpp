@@ -271,7 +271,7 @@ typedef class AbsoluteCriticalSectionLockerImpl_
 {
 #if defined(DEBUG_BUILD) && DEBUG_BUILD
     static constexpr std::uint32_t MaximumDurationAbsoluteUSec      = 30;
-    static constexpr std::uint32_t MaximumDurationWhenActiveUSec    = 3;
+    static constexpr std::uint32_t MaximumDurationWhenActiveUSec    = 5;
 
     static constexpr std::uint32_t TimerFrequency = STM32_SYSCLK;
 

@@ -91,7 +91,6 @@ public:
     {
         if (remaining_delay_ > 0)
         {
-            context_.reportDebugVariables({});
             remaining_delay_ -= period;
             return;
         }
@@ -99,7 +98,6 @@ public:
         if (!runner_.isConstructed())
         {
             processing_enabled_ = false;
-            context_.reportDebugVariables({});
 
             setpoint_.mode = setpoint_.Mode::Iq;
             setpoint_.value = InitialRelativeSetpoint * result_.max_current;  // Back to the beginning
@@ -107,20 +105,6 @@ public:
             constructRunner();
 
             return;     // Can't do much else on this cycle, we don't want the IRQ to stretch forever
-        }
-
-        {
-            const Vector<2> Udq = runner_->getUdq();
-            const Vector<2> Idq = runner_->getIdq();
-
-            context_.reportDebugVariables({
-                Udq[0],
-                Udq[1],
-                Idq[0],
-                Idq[1],
-                runner_->getElectricalAngularVelocity(),
-                result_.phi * 1e3F
-            });
         }
 
         setpoint_.value += (result_.max_current / AccelerationDurationSec) * period;

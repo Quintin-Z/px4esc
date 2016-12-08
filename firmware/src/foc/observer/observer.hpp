@@ -27,6 +27,7 @@
 #include <math/math.hpp>
 #include <zubax_chibios/util/heapless.hpp>
 #include <zubax_chibios/util/float_eq.hpp>
+#include <variable_tracer.hpp>
 #include <cassert>
 
 
@@ -136,6 +137,10 @@ class Observer
     Vector<4> x_ = Vector<4>::Zero();
     Matrix<4, 4> P_;
 
+    // Tracing probes
+    variable_tracer::Probe probe_estimated_Id_;
+    variable_tracer::Probe probe_estimated_Iq_;
+
 public:
     Observer(const Parameters& parameters,
              Const field_flux,
@@ -150,8 +155,6 @@ public:
     void setDirectionConstraint(DirectionConstraint dc) { direction_constraint_ = dc; }
 
     const Matrix<4, 4>& getP() const { return P_; }
-
-    Vector<2> getIdq() const { return x_.block<2, 1>(0, 0); }
 
     Scalar getAngularVelocity() const { return x_[StateIndexAngularVelocity]; }
 

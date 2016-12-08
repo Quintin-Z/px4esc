@@ -147,7 +147,6 @@ class MotorIdentificationTask : public ITask
     {
         std::uint32_t pwm_period_counter = 0;
         Vector<3> pwm_output_vector = Vector<3>::Zero();
-        std::array<Scalar, ITask::NumDebugVariables> debug_values{};
 
         ContextImplementation(const TaskContext& cont)
         {
@@ -158,20 +157,6 @@ class MotorIdentificationTask : public ITask
         {
             AbsoluteCriticalSectionLocker locker;
             pwm_output_vector = pwm;
-        }
-
-        void reportDebugVariables(const std::initializer_list<Scalar>& variables) override
-        {
-            AbsoluteCriticalSectionLocker locker;
-            std::copy_n(variables.begin(),
-                        std::min(variables.size(), debug_values.size()),
-                        debug_values.begin());
-        }
-
-        void clearDebugVariables()
-        {
-            AbsoluteCriticalSectionLocker locker;
-            std::fill(debug_values.begin(), debug_values.end(), 0);
         }
 
         Scalar getTime() const override
@@ -314,7 +299,6 @@ public:
              * Construction of the next task may take a VERY long time (like 50+ microseconds), because some task
              * classes initialize large data structures or buffers. We don't want to take a critical section here.
              */
-            context_.clearDebugVariables();
             if (!sequencer_.selectNextTask())
             {
                 return Result::success();
@@ -357,8 +341,6 @@ public:
     }
 
     bool isPreCalibrationRequired() const override { return true; }
-
-    std::array<Scalar, NumDebugVariables> getDebugVariables() const override { return context_.debug_values; }
 
     Scalar getProgress() const
     {

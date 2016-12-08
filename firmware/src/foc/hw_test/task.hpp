@@ -264,19 +264,6 @@ public:
         return {pwm_output_, true};
     }
 
-    std::array<Scalar, NumDebugVariables> getDebugVariables() const override
-    {
-        const auto currents = currents_filter_.getValue();
-
-        return {
-            hardware_status_.inverter_voltage,
-            math::convertKelvinToCelsius(hardware_status_.inverter_temperature),
-            hardware_status_.current_sensor_gain,
-            currents[0],
-            currents[1]
-        };
-    }
-
     void applyResultToGlobalContext(TaskContext& inout_context) const override
     {
         inout_context.hw_test_report = report_;

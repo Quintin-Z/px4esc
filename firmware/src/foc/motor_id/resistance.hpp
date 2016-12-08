@@ -138,11 +138,9 @@ public:
     void onNextPWMPeriod(const Vector<2>& phase_currents_ab, Const inverter_voltage) override
     {
         currents_filter_.update(phase_currents_ab);
+        // We used to trace this parameter, but stopped doing to when migrated to the new tracing framework.
+        // Should we return the tracing here, or is this parameter irrelevant?
         const auto filtered_currents = currents_filter_.getValue();
-        context_.reportDebugVariables({
-            filtered_currents[0],
-            filtered_currents[1]
-        });
 
         switch (state_)
         {

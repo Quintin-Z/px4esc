@@ -137,7 +137,10 @@ public:
         tracer_.stop();
         for (auto n : names)
         {
-            (void) tracer_.trace(n);
+            if (!n.isEmpty())
+            {
+                (void) tracer_.trace(n);
+            }
         }
     }
 

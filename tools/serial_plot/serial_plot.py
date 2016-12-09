@@ -39,6 +39,11 @@ else:
 SER_BAUDRATE = 115200
 
 
+VARIABLE_SCALING = {
+    'AVel': 1e-3
+}
+
+
 # Borrowed from the UAVCAN GUI Tool
 def add_crosshair(plot, render_measurements, color=Qt.gray):
     pen = mkPen(color=QColor(color), width=1)
@@ -293,6 +298,12 @@ class CLIInputReader(threading.Thread):
 def value_handler(x, values, names):
     dumper.add(x, values, names)
     for val, name in zip(values, names):
+        try:
+            scale = VARIABLE_SCALING[name]
+            val *= scale
+            name += ' %.3e' % scale
+        except KeyError:
+            pass
         try:
             window.plot.update_values(name, [x], [val])
         except KeyError:

@@ -11,10 +11,10 @@ import os
 import sys
 import threading
 import time
-import serial
 import glob
 import queue
 import trace_decoder
+from high_throughput_serial_port import SerialPort
 
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QApplication, QMainWindow, QAction
 from PyQt5.QtCore import Qt, QTimer
@@ -96,6 +96,7 @@ class RealtimePlotWidget(QWidget):
 
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(False)
+        # noinspection PyUnresolvedReferences
         self._update_timer.timeout.connect(self._update)
         self._update_timer.start(200)
 
@@ -180,6 +181,7 @@ class Window(QMainWindow):
         # Actions menu
         clear_action = QAction('&Clear', self)
         clear_action.setShortcut(QKeySequence('Ctrl+Shift+C'))
+        # noinspection PyUnresolvedReferences
         clear_action.triggered.connect(self._plot.reset)
 
         actions_menu = self.menuBar().addMenu('&Actions')
@@ -227,14 +229,17 @@ class SerialReader:
         8: trace_decoder.Fields.FLOAT64
     }
 
-    def __init__(self, port, baudrate, timeout=None):
-        self._port = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, writeTimeout=timeout)
+    def __init__(self, port, baudrate):
+        self._port = SerialPort(port, baudrate)
         self._format = None
         self._names = None
         self._timestamp_index = 0
 
     def poll(self, value_handler, raw_handler):
-        line = self._port.readline().decode()
+        line = self._port.readline(timeout=1e-3).decode('latin1')
+        if not line:
+            return False
+
         if not line.startswith('~'):
             raw_handler(line)
         else:
@@ -245,7 +250,7 @@ class SerialReader:
                 self._timestamp_index = self._names.index('time')
                 del self._names[self._timestamp_index]
                 self._format = ''.join(self.DEFAULT_SIZE_TO_FORMAT_MAP[int(x[1])] for x in vs)
-                print(self._names, self._timestamp_index, self._format)
+                print(self._names, self._timestamp_index, self._format, file=sys.stderr)
             elif self._format is not None:
                 # Recovering the latest sample if multiple lines were erroneously joined together
                 line = line.split('~')[-1]
@@ -260,12 +265,14 @@ class SerialReader:
             else:
                 pass    # We missed the sample format declaration, let's wait for the next one
 
-    def run(self, value_handler, raw_handler):
-        while True:
-            try:
-                self.poll(value_handler, raw_handler)
-            except Exception as ex:
-                print('Serial poll failed:', ex)
+        return True
+
+    def process_queued_data(self, value_handler, raw_handler):
+        try:
+            while self.poll(value_handler, raw_handler):
+                pass
+        except Exception as ex:
+            print('Serial poll failed:', ex)
 
 
 class CLIInputReader(threading.Thread):
@@ -292,17 +299,21 @@ def value_handler(x, values, names):
             window.plot.add_curve(name, name, [x], [val])
 
 
-app = QApplication(sys.argv)
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = Window()
 
-window = Window()
+    reader = SerialReader(SER_PORT, SER_BAUDRATE)
 
-reader = SerialReader(SER_PORT, SER_BAUDRATE)
+    poll_timer = QTimer(window)
+    poll_timer.setSingleShot(False)
+    # noinspection PyUnresolvedReferences
+    poll_timer.timeout.connect(lambda: reader.process_queued_data(value_handler, lambda s: print(s.rstrip())))
+    poll_timer.start(10)
 
-dumper = FileDumpWriter()
+    dumper = FileDumpWriter()
 
-cli = CLIInputReader(lambda line: reader._port.write((line + '\r\n').encode()))
+    cli = CLIInputReader(lambda line: reader._port.write((line + '\r\n').encode()))
 
-threading.Thread(target=reader.run, args=(value_handler, lambda s: print(s.rstrip())), daemon=True).start()
-
-window.show()
-exit(app.exec_())
+    window.show()
+    exit(app.exec_())

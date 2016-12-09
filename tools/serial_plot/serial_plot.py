@@ -96,14 +96,11 @@ class RealtimePlotWidget(QWidget):
         vbox.addWidget(self._plot_widget)
         self.setLayout(vbox)
 
-        self._last_update_ts = 0
-        self._reset_required = False
-
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(False)
         # noinspection PyUnresolvedReferences
         self._update_timer.timeout.connect(self._update)
-        self._update_timer.start(200)
+        self._update_timer.start(500)
 
         self._color_index = 0
         self._curves = {}
@@ -127,13 +124,6 @@ class RealtimePlotWidget(QWidget):
         # Final reset
         self.reset()
 
-    def _trigger_auto_reset_if_needed(self):
-        ts = time.monotonic()
-        dt = ts - self._last_update_ts
-        self._last_update_ts = ts
-        if dt > 2:
-            self._reset_required = True
-
     def add_curve(self, curve_id, curve_name, data_x=None, data_y=None):
         color = QColor(self.COLORS[self._color_index % len(self.COLORS)])
         self._color_index += 1
@@ -142,13 +132,11 @@ class RealtimePlotWidget(QWidget):
         data_x = numpy.array(data_x if data_x is not None else [])
         data_y = numpy.array(data_y if data_y is not None else [])
         self._curves[curve_id] = {'data': (data_x, data_y), 'plot': plot}
-        self._trigger_auto_reset_if_needed()
 
     def update_values(self, curve_id, x, y):
         curve = self._curves[curve_id]
         old_x, old_y = curve['data']
         curve['data'] = numpy.append(old_x, x), numpy.append(old_y, y)
-        self._trigger_auto_reset_if_needed()
 
     def reset(self):
         for curve in self._curves.keys():
@@ -165,10 +153,6 @@ class RealtimePlotWidget(QWidget):
         self._legend = self._plot_widget.addLegend()
 
     def _update(self):
-        if self._reset_required:
-            self.reset()
-            self._reset_required = False
-
         for curve in self._curves.values():
             if len(curve['data'][0]):
                 curve['plot'].setData(*curve['data'])

@@ -192,16 +192,15 @@ class FileDumpWriter(threading.Thread):
         self.start()
 
     def run(self):
-        prev_ts = time.monotonic()
+        max_x = 0
         while True:
             x, values, names = self._q.get()
-            ts = time.monotonic()
-            if (ts - prev_ts > 2) or not self._f:
+            if (x < max_x) or not self._f:
                 if self._f:
                     self._f.close()
                 self._f = open('latest_data.log', 'w', encoding='utf8')
-                self._f.write('Started at %.6f real, %.6f mono\n' % (time.time(), ts))
-            prev_ts = ts
+                self._f.write('Started at %.6f real\n' % time.time())
+            max_x = max(max_x, x)
             sample = dict(zip(names, values))
             sample['time'] = x
             self._f.write('%s\n' % sample)

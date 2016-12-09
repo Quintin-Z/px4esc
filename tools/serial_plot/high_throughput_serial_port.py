@@ -20,11 +20,6 @@ except AttributeError:
 __all__ = ['SerialPort']
 
 
-# Maximum queue size must not be larger than 0x7FFF, see this:
-# http://stackoverflow.com/questions/5900985/multiprocessing-queue-maxsize-limit-is-32767
-RX_QUEUE_SIZE = 32767
-TX_QUEUE_SIZE = 32767
-
 IO_PROCESS_NICENESS_INCREMENT = -18
 
 RW_TIMEOUT = 0.1
@@ -157,9 +152,6 @@ class SerialPort:
         """Reads data until termination_condition() returns true, or until read timeout is exceeded.
         """
         while not termination_condition():
-            if not self._process.is_alive():
-                raise RuntimeError('IO process is dead')
-
             blocked_at = time.monotonic()
             try:
                 if timeout is not None:
@@ -169,6 +161,8 @@ class SerialPort:
                     should_block = True
                 ret = self._rxq.get(block=should_block, timeout=timeout)
             except queue.Empty:
+                if not self._process.is_alive():
+                    raise RuntimeError('IO process is dead')
                 break               # Timeout
 
             if timeout is not None:
@@ -246,15 +240,22 @@ class SerialPort:
             raise ValueError('Invalid data type: %r' % type(data))
 
         try:
-            self._txq.put(data, timeout=timeout)
+            if len(data) > 0:
+                self._txq.put(data, timeout=timeout)
         except queue.Full:
             return 0
         else:
             return len(data)
 
+    @synchronized
+    def close(self):
+        if self._process.is_alive():
+            self._txq.put(None)
+            self._process.join()
+
 
 if __name__ == '__main__':
-    sp = SerialPort('/dev/serial/by-id/usb-Black_Sphere_Technologies_Black_Magic_Probe_B5E4ABFE-if02', 115200)
+    sp = SerialPort('/dev/serial/by-id/usb-Zubax_Robotics_PX4ESC_26003B00115134333130373000000000-if00', 115200)
 
     sp.write('\r\nsysinfo\r\n\r\nstatus\r\n')
 
@@ -267,3 +268,5 @@ if __name__ == '__main__':
 
     time.sleep(1)
     print(sp.read().decode('latin1'))
+
+    sp.close()

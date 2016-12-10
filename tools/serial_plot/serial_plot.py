@@ -40,7 +40,8 @@ SER_BAUDRATE = 115200
 
 
 VARIABLE_SCALING = {
-    'AVel': 1e-3
+    'AVel': 1e-3,
+    'phi':  1e3
 }
 
 

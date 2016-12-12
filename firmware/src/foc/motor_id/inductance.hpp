@@ -53,9 +53,8 @@ class InductanceTask : public ISubTask
     static constexpr Scalar MeasurementDuration         = 15.0F;
     static constexpr Scalar MinValidSampleRatio         = 0.9F;
     static constexpr Scalar OneSizeFitsAllLq            = 50.0e-6F;
-    static constexpr unsigned IdqMovingAverageLength    = 5;
 
-    using Modulator = ThreePhaseVoltageModulator<IdqMovingAverageLength>;
+    using Modulator = ThreePhaseVoltageModulator<>;
 
     SubTaskContextReference context_;
     MotorParameters result_;

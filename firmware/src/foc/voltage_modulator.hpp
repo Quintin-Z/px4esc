@@ -90,7 +90,7 @@ public:
 /**
  * Generates rotating three phase voltage vector using measured and estimated parameters of the motor and Iq reference.
  */
-template <unsigned IdqMovingAverageLength>
+template <unsigned IdqMovingAverageLength = 5>
 class ThreePhaseVoltageModulator
 {
 public:

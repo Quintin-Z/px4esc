@@ -37,9 +37,8 @@ class FluxLinkageTask : public ISubTask
     // Voltage reduction during the measurement phase shold be very slow in order to reduce phase delay of the filters.
     static constexpr Scalar VoltageSlopeLengthSec       = 40.0F;
     static constexpr Scalar MinVoltage                  = 0.001F;
-    static constexpr unsigned IdqMovingAverageLength    = 5;
 
-    using Modulator = ThreePhaseVoltageModulator<IdqMovingAverageLength>;
+    using Modulator = ThreePhaseVoltageModulator<>;
 
     SubTaskContextReference context_;
     MotorParameters result_;

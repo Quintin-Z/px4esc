@@ -60,7 +60,13 @@ enum class Mode
      * This mode combines R_L and Phi.
      * Estimated parameters: Rs, L, Phi.
      */
-    R_L_Phi
+    R_L_Phi,
+
+    /**
+     * Perform general identification run.
+     * This is useful for offline model identification and adjustment.
+     */
+    TestRun
 
     // WARNING: Make sure to update ModeNames when adding new entries here!
 };
@@ -72,7 +78,8 @@ constexpr const char* ModeNames[] =
 {
     "r_l",
     "phi",
-    "r_l_phi"
+    "r_l_phi",
+    "test_run"
 };
 
 constexpr unsigned NumModes = sizeof(ModeNames) / sizeof(ModeNames[0]);

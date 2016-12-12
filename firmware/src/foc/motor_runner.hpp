@@ -46,6 +46,7 @@ using board::motor::AbsoluteCriticalSectionLocker;
  */
 class MotorRunner final
 {
+    // TODO: We may need to use common Idq filtering settings everywhere!
     static constexpr unsigned IdqMovingAverageLength = 10;
 
     static constexpr Scalar MaximumSpinupDurationFraction          = 1.5F;

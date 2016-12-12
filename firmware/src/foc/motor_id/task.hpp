@@ -29,6 +29,7 @@
 #include "resistance.hpp"
 #include "inductance.hpp"
 #include "flux_linkage.hpp"
+#include "test_run.hpp"
 
 
 namespace foc
@@ -179,6 +180,7 @@ class MotorIdentificationTask : public ITask
     , ResistanceTask
     , InductanceTask
     , FluxLinkageTask
+    , TestRunTask
     > sequencer_;
 
     bool started_ = false;
@@ -221,6 +223,11 @@ public:
                                        InductanceTask,
                                        CoolDownDelayTask,
                                        FluxLinkageTask>();
+                break;
+            }
+            case Mode::TestRun:
+            {
+                sequencer_.setSequence<TestRunTask>();
                 break;
             }
             default:

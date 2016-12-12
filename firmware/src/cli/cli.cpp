@@ -639,12 +639,26 @@ class MotorIdentificationCommand : public os::shell::ICommandHandler
 
     void execute(os::shell::BaseChannelWrapper& ios, int argc, char** argv) override
     {
+        using foc::motor_id::Mode;
+        using foc::motor_id::ModeNames;
+        using foc::motor_id::NumModes;
+
         if (argc <= 1)
         {
             ios.puts("Perform motor identification using the specified mode.");
             ios.puts("Option -p will plot real time data.");
-            ios.print("\t%s r_l | phi | fine | r_l_phi | r_l_phi_fine [-p]\n", argv[0]);
-            ios.puts("Use mode r_l_phi_fine to perform full identification.");
+
+            os::heapless::String<> mode_names;
+            for (auto x : ModeNames)
+            {
+                if (!mode_names.empty())
+                {
+                    mode_names += " | ";
+                }
+                mode_names += x;
+            }
+
+            ios.print("\t%s %s [-p]\n", argv[0], mode_names.c_str());
             return;
         }
 
@@ -662,18 +676,30 @@ class MotorIdentificationCommand : public os::shell::ICommandHandler
         }
 
         // Parsing mode
-        const os::heapless::String<20> mode_string(argv[1]);
-        foc::motor_id::Mode mode{};
-        if      (mode_string.toLowerCase() == "r_l")            { mode = foc::motor_id::Mode::R_L;                  }
-        else if (mode_string.toLowerCase() == "phi")            { mode = foc::motor_id::Mode::Phi;                  }
-        else if (mode_string.toLowerCase() == "fine")           { mode = foc::motor_id::Mode::FineTuning;           }
-        else if (mode_string.toLowerCase() == "r_l_phi")        { mode = foc::motor_id::Mode::R_L_Phi;              }
-        else if (mode_string.toLowerCase() == "r_l_phi_fine")   { mode = foc::motor_id::Mode::R_L_Phi_FineTuning;   }
-        else
+        Mode mode = Mode();
+
         {
-            ios.print("ERROR: Invalid identification mode: %s\n", mode_string.c_str());
-            return;
+            const os::heapless::String<20> mode_string(argv[1]);
+            bool mode_valid = false;
+
+            for (unsigned i = 0; i < NumModes; i++)
+            {
+                if (mode_string.toLowerCase() == ModeNames[i])
+                {
+                    mode = Mode(i);
+                    mode_valid = true;
+                    break;
+                }
+            }
+
+            if (!mode_valid)
+            {
+                ios.print("ERROR: Invalid identification mode: %s\n", mode_string.c_str());
+                return;
+            }
         }
+
+        assert(unsigned(mode) < NumModes);
 
         // Running
         if (!foc::isInactive())
@@ -682,7 +708,7 @@ class MotorIdentificationCommand : public os::shell::ICommandHandler
             return;
         }
 
-        ios.puts("PRESS ANY KEY TO ABORT");
+        ios.print("MODE %d; PRESS ANY KEY TO ABORT\n", int(mode));
 
         while (ios.getChar(1) > 0)
         {

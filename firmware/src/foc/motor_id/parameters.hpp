@@ -57,26 +57,25 @@ enum class Mode
     Phi,
 
     /**
-     * In this mode, the motor WILL SPIN.
-     * In order to achieve correct results, the motor MUST NOT BE CONNECTED TO ANY MECHANICAL LOAD.
-     * This mode performs final optimizations. All parameters must be known.
-     */
-    FineTuning,
-
-    /**
      * This mode combines R_L and Phi.
      * Estimated parameters: Rs, L, Phi.
      */
-    R_L_Phi,
+    R_L_Phi
 
-    /**
-     * This mode combines R_L_Phi and FineTuning.
-     * Estimated parameters: Rs, L, Phi.
-     */
-    R_L_Phi_FineTuning
+    // WARNING: Make sure to update ModeNames when adding new entries here!
 };
 
-static constexpr unsigned NumModes = 5;     ///< Please maintain this carefully
+/**
+ * Please maintain this carefully.
+ */
+constexpr const char* ModeNames[] =
+{
+    "r_l",
+    "phi",
+    "r_l_phi"
+};
+
+constexpr unsigned NumModes = sizeof(ModeNames) / sizeof(ModeNames[0]);
 
 /**
  * Parameters used by the motor parameters estimator logic.

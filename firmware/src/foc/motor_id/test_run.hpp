@@ -82,7 +82,7 @@ public:
         // TODO this is temporary
         angular_acceleration_ = 50.0F;
         setpoint_.mode = Modulator::Setpoint::Mode::Iq;
-        setpoint_.value = 2.0F;
+        setpoint_.value = 4.0F;
     }
 
     void onMainIRQ(Const period, const board::motor::Status&) override
@@ -93,14 +93,16 @@ public:
         }
 
         // TODO this is temporary
-        if (angular_velocity_ > 500.0F)
+        if (angular_velocity_ > 1000.0F)
         {
             angular_acceleration_ *= -1.0F;
         }
-        if (angular_velocity_ < -500.0F)
+        if (angular_velocity_ < -1000.0F)
         {
             status_ = Status::Succeeded;
         }
+
+        setpoint_.value = std::copysign(setpoint_.value, angular_velocity_);
 
         angular_velocity_ += angular_acceleration_ * period;
     }

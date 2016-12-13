@@ -210,6 +210,82 @@ public:
     auto getNumSamples() const { return num_samples_; }
 };
 
+/**
+ * Simple rolling sample variance algorithm.
+ * This implementation may experience poor numerical stability for large samples, due to squaring.
+ * Useful resources:
+ *  - https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+ *  - http://math.stackexchange.com/questions/595541/rolling-standard-deviations
+ *
+ * @tparam WindowLength     maximum window length
+ * @tparam T                target data type, scalar (vectors/matrices are NOT supported)
+ */
+template <unsigned WindowLength, typename T>
+class RollingSampleVariance
+{
+    T window_[WindowLength]{};
+
+    T mean_sum_ = T(0);
+    T squared_mean_sum_ = T(0);
+
+    unsigned current_depth_ = 0;
+    unsigned next_index_ = 0;
+
+public:
+    void update(const T x_new)
+    {
+        if (current_depth_ < WindowLength)
+        {
+            current_depth_++;
+        }
+        else
+        {
+            const T x_old = window_[next_index_];
+            mean_sum_ -= x_old;
+            squared_mean_sum_ -= x_old * x_old;
+        }
+
+        mean_sum_ += x_new;
+        squared_mean_sum_ += x_new * x_new;
+        window_[next_index_] = x_new;
+
+        next_index_++;
+        if (next_index_ >= WindowLength)
+        {
+            next_index_ = 0;
+        }
+    }
+
+    T getMean() const
+    {
+        if (current_depth_ > 0)
+        {
+            return mean_sum_ / T(current_depth_);
+        }
+
+        assert(false);
+        return T(0);
+    }
+
+    T getVariance() const
+    {
+        if (current_depth_ > 1)
+        {
+            const T mean = mean_sum_ / T(current_depth_);
+            const T squared_mean = squared_mean_sum_ / T(current_depth_);
+            return (squared_mean - (mean * mean)) * (T(current_depth_) / T(current_depth_ - 1U));
+        }
+
+        assert(false);
+        return T(0);
+    }
+
+    T getStandardDeviation() const
+    {
+        return std::sqrt(getVariance());
+    }
+};
+
 
 inline Vector<2> sincos(Scalar x)
 {

@@ -45,6 +45,40 @@ class TestRunTask : public ISubTask
      */
     using Modulator = ThreePhaseVoltageModulator<>;
 
+    class StallDetector
+    {
+        math::RollingSampleVariance<500, Scalar> variance_estimator_;
+        math::SimpleMovingAverageFilter<500, Scalar> I_prefilter_;
+        Scalar I_filtered_ = 0;
+
+    public:
+        StallDetector() :
+            I_prefilter_(0.0F)
+        { }
+
+        bool update(Const period, const Vector<2> Idq)
+        {
+            Const prev_I = I_filtered_;
+
+            Const innovation = period * 10.0F;
+            I_prefilter_.update(Idq.norm());
+            I_filtered_ += innovation * (I_prefilter_.getValue() - I_filtered_);
+
+            Const dIdt = (I_filtered_ - prev_I) / period;
+
+            // TODO: Proper threshold estimation!
+            Const dIdt_threshold = 400.0F;
+
+            return std::abs(dIdt) > dIdt_threshold;
+        }
+
+        void reset()
+        {
+            I_filtered_ = 0.0F;
+            I_prefilter_.reset(0.0F);
+        }
+    } stall_detector_;
+
     SubTaskContextReference context_;
     const MotorParameters result_;
 
@@ -93,6 +127,16 @@ public:
         }
 
         // TODO this is temporary
+        {
+            AbsoluteCriticalSectionLocker locker;   // Accessing shared data, lock is required
+
+            if (stall_detector_.update(period, latest_modulator_output_.Idq))
+            {
+                status_ = Status::Failed;
+            }
+        }
+
+        // TODO this is temporary
         if (angular_velocity_ > 1000.0F)
         {
             angular_acceleration_ *= -1.0F;
@@ -102,7 +146,7 @@ public:
             status_ = Status::Succeeded;
         }
 
-        setpoint_.value = std::copysign(setpoint_.value, angular_velocity_);
+        setpoint_.value = std::copysign(std::max(0.1F, std::abs(angular_velocity_) * 0.01F), angular_velocity_);
 
         angular_velocity_ += angular_acceleration_ * period;
     }

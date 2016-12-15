@@ -47,35 +47,57 @@ class TestRunTask : public ISubTask
 
     class StallDetector
     {
-        math::RollingSampleVariance<500, Scalar> variance_estimator_;
-        math::SimpleMovingAverageFilter<500, Scalar> I_prefilter_;
+        static constexpr unsigned WindowLength = 100;
+        static constexpr unsigned NumSamplesToSuppressAfterStepChange = WindowLength / 2;
+        static constexpr Scalar StdevThresholdMultiplier = 10.0F;
+
+        math::RollingSampleVariance<100, Scalar> stdev_estimator_;
+
+        math::FivePointDifferentiator<Scalar> I_derivative_;
+        math::FivePointDifferentiator<Scalar> I_second_derivative_;
+
         Scalar I_filtered_ = 0;
+        unsigned remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
+
+        Scalar computeSecondDerivativeOfCurrent(Const period, Const current)
+        {
+            // We don't actually need any particular units, but A/s is easier to work with than any arbitrary units
+            return I_second_derivative_.update(I_derivative_.update(current) / period) / period;
+        }
 
     public:
-        StallDetector() :
-            I_prefilter_(0.0F)
-        { }
-
-        bool update(Const period, const Vector<2> Idq)
+        bool update(Const period, const Vector<2> Idq, const bool expect_step_change)
         {
-            Const prev_I = I_filtered_;
+            if (expect_step_change)
+            {
+                remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
+            }
 
-            Const innovation = period * 10.0F;
-            I_prefilter_.update(Idq.norm());
-            I_filtered_ += innovation * (I_prefilter_.getValue() - I_filtered_);
+            I_filtered_ += period * 10.0F * (Idq.norm() - I_filtered_);
 
-            Const dIdt = (I_filtered_ - prev_I) / period;
+            Const I_prime_prime_clipped = std::max(0.0F, computeSecondDerivativeOfCurrent(period, I_filtered_));
 
-            // TODO: Proper threshold estimation!
-            Const dIdt_threshold = 400.0F;
+            stdev_estimator_.update(I_prime_prime_clipped);
 
-            return std::abs(dIdt) > dIdt_threshold;
+            if (remaining_suppressed_samples_ > 0)
+            {
+                remaining_suppressed_samples_--;
+                return false;
+            }
+            else
+            {
+                Const threshold = stdev_estimator_.getStandardDeviation() * StdevThresholdMultiplier;
+                return I_prime_prime_clipped > threshold;
+            }
         }
 
         void reset()
         {
+            stdev_estimator_.reset();
+            I_derivative_.reset();
+            I_second_derivative_.reset();
             I_filtered_ = 0.0F;
-            I_prefilter_.reset(0.0F);
+            remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
         }
     } stall_detector_;
 
@@ -130,7 +152,7 @@ public:
         {
             AbsoluteCriticalSectionLocker locker;   // Accessing shared data, lock is required
 
-            if (stall_detector_.update(period, latest_modulator_output_.Idq))
+            if (stall_detector_.update(period, latest_modulator_output_.Idq, false))
             {
                 status_ = Status::Failed;
             }

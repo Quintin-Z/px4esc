@@ -28,6 +28,16 @@ def difference_list(cont):
     return numpy.array(out)
 
 
+def running_mean(x, n):
+    if n % 2 == 0:
+        n += 1
+    augmentation = (min(len(x), n) - 1) // 2
+    return numpy.convolve(numpy.concatenate(([x[0]] * augmentation,
+                                             x,
+                                             [x[-1]] * augmentation)),
+                          numpy.ones((n,)) / n, mode='valid')
+
+
 def find_index(fn, container):
     for i, x in enumerate(container):
         if fn(x):

@@ -256,6 +256,15 @@ public:
         }
     }
 
+    void reset()
+    {
+        mean_sum_ = T(0);
+        squared_mean_sum_ = T(0);
+
+        current_depth_ = 0;
+        next_index_ = 0;
+    }
+
     T getMean() const
     {
         if (current_depth_ > 0)
@@ -283,6 +292,54 @@ public:
     T getStandardDeviation() const
     {
         return std::sqrt(getVariance());
+    }
+};
+
+/**
+ * Standard one dimensional five point stencil numerical differentiation algorithm.
+ */
+template <typename T>
+class FivePointDifferentiator
+{
+    T p_[5]{};
+    unsigned n_ = 0;
+
+public:
+    T update(const T x)
+    {
+        // This block ensures correct approximation during initialization
+        if (n_ < 5)
+        {
+            p_[n_++] = x;
+
+            if (n_ < 2)
+            {
+                return T(0);
+            }
+
+            if (n_ < 5)
+            {
+                return p_[n_ - 1] - p_[n_ - 2];
+            }
+        }
+        else
+        {
+            p_[0] = p_[1];
+            p_[1] = p_[2];
+            p_[2] = p_[3];
+            p_[3] = p_[4];
+            p_[4] = x;
+        }
+
+        return (p_[0] -
+                p_[1] * T(8) +
+                p_[3] * T(8) -
+                p_[4]) / T(12);
+    }
+
+    void reset()
+    {
+        n_ = 0;
     }
 };
 

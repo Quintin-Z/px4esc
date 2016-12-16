@@ -454,6 +454,7 @@ private:
     std::array<CacheEntry, MaxTracedVariables> cache_;
     std::uint_fast8_t cache_size_ = 0;
     ProbeList::ModificationCountType var_list_mod_cnt_ = 0;
+    bool complete_sampling_required_ = false;
 
 
     bool isCacheStillValid() const
@@ -506,6 +507,15 @@ private:
             {
                 *out++ = {n, loc_size.first, loc_size.second};
                 cache_size_++;
+            }
+            else if (complete_sampling_required_)
+            {
+                cache_size_ = 0;    // CSR mode, at least one variable is unavailable - cancel all
+                break;              // We still keep the cache valid because it's unnecessary to try again every sample
+            }
+            else
+            {
+                ;  // Variable has been requested but is not available, complete sampling not requested --> do nothing
             }
         }
     }
@@ -579,10 +589,11 @@ public:
     /**
      * @ref sample().
      */
-    enum SampleResult
+    enum class SampleResult
     {
-        NothingToSample,        ///< No data generated, nothing to do
-        VariableListUpdated,    ///< Variable list may have been changed, e.g. new variables were added and such
+        Idle,                   ///< No data generated, nothing to do
+        VariablesNotAvailable,  ///< Requested variables are not available at the moment, nothing to do
+        SamplingSetUpdated,     ///< Variable list may have been changed, e.g. new variables were added and such
         SampledSuccessfully     ///< Regular sample has been performed, ASCII dump has been generated
     };
 
@@ -591,14 +602,14 @@ public:
      * The dump can then be sent to the outside world, e.g. via UART.
      * @param output_ptr    location where the ASCII output will be stored; must be not smaller than
      *                      @ref MaxOutputStringLengthWithNullTermination
-     * @return              length of the encoded string and @ref SampleResult
+     * @return              length of the encoded string (nut including null termination) and @ref SampleResult
      */
     std::pair<unsigned, SampleResult> sample(char* output_ptr)
     {
         if (traced_names_.front().isEmpty())
         {
             *output_ptr = '\0';
-            return {0, SampleResult::NothingToSample};
+            return {0, SampleResult::Idle};
         }
 
         {
@@ -615,12 +626,18 @@ public:
         if (isCacheStillValid())
         {
             *output_ptr = '\0';
-            return {0, SampleResult::NothingToSample};
+            return {0, SampleResult::VariablesNotAvailable};
         }
 
         rebuildCache();
-        const unsigned len = generateVariableList(output_ptr);
-        return {len, SampleResult::VariableListUpdated};
+        if (const unsigned len = generateVariableList(output_ptr))
+        {
+            return {len, SampleResult::SamplingSetUpdated};
+        }
+        else
+        {
+            return {0, SampleResult::VariablesNotAvailable};
+        }
     }
 
     /**
@@ -663,6 +680,17 @@ public:
     {
         markCacheInvalid();
         std::fill(traced_names_.begin(), traced_names_.end(), ShortName());
+    }
+
+    /**
+     * When complete sampling is required, the tracer will not produce any tracing output unless ALL of the requested
+     * variables are available for sampling.
+     * By default complete sampling is not required, i.e. the class will report all available variables among requested.
+     */
+    bool isCompleteSamplingRequired() const { return complete_sampling_required_; }
+    void setCompleteSamplingRequired(bool enabled)
+    {
+        complete_sampling_required_ = enabled;
     }
 };
 

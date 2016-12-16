@@ -952,13 +952,16 @@ class TraceCommand : public os::shell::ICommandHandler
 
     void execute(os::shell::BaseChannelWrapper& ios, int argc, char** argv) override
     {
+        g_tracer.stop();
+
         if (argc <= 1)
         {
-            g_tracer.stop();
             ios.print("Tracing stopped. To start tracing:\n"
-                      "\t%s [variable-name [variable-name [...]]]\n"
-                      "Execute without arguments to stop.\n", argv[0]);
+                      "\t%s [variable-name [variable-name [...]]] [-c]\n",
+                      argv[0]);
 
+            ios.puts("Execute without arguments to stop.");
+            ios.puts("Option -c suppresses tracing unless ALL of the requested variables are available.");
             ios.puts("Variables that are currently available for tracing:");
 
             static constexpr unsigned MaxNames = 50;
@@ -974,23 +977,45 @@ class TraceCommand : public os::shell::ICommandHandler
         else
         {
             constexpr unsigned MaxNames = std::tuple_size<Tracer::NameList>::value;
-            const unsigned num_names = argc - 1;
 
-            if (num_names <= MaxNames)
+            bool complete_sampling_required = false;
+            unsigned num_names_added = 0;
+            Tracer::NameList names;
+
+            for (int a = 1; a < argc; a++)
             {
-                Tracer::NameList names;
-                auto it = names.begin();
-                for (int a = 1; a < argc; a++)
+                const os::heapless::String<10> arg(argv[a]);
+
+                if (arg[0] == '-')
                 {
-                    *it++ = argv[a];
+                    if (arg == "-c")
+                    {
+                        complete_sampling_required = true;
+                    }
+                    else
+                    {
+                        ios.print("ERROR: Invalid option: %s\n", arg.c_str());
+                        return;
+                    }
                 }
+                else
+                {
+                    if (num_names_added >= MaxNames)
+                    {
+                        ios.print("ERROR: Too many names (more than %d)\n", MaxNames);
+                        return;
+                    }
+                    names[num_names_added++] = arg.c_str();
+                }
+            }
 
-                g_tracer.trace(names);
-            }
-            else
+            if (num_names_added == 0)
             {
-                ios.print("ERROR: Too many names: %d provided, %d max\n", num_names, MaxNames);
+                ios.puts("ERROR: No names specified");
+                return;
             }
+
+            g_tracer.trace(names, complete_sampling_required);
         }
     }
 } static cmd_trace;

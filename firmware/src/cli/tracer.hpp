@@ -84,11 +84,7 @@ class Tracer : private chibios_rt::BaseStaticThread<512>
                 result = tracer_.sample(&output_buffer_[1]);
             }
 
-            if (result.second == Impl::SampleResult::NothingToSample)
-            {
-                ::usleep(100000);
-            }
-            else
+            if (result.first > 0)
             {
                 // Note that there's no real need to zero-terminate the output, since we treat the string as bytes
                 output_buffer_[result.first + 1] = '\r';
@@ -100,6 +96,21 @@ class Tracer : private chibios_rt::BaseStaticThread<512>
                                        reinterpret_cast<const std::uint8_t*>(&output_buffer_[0]),
                                        result.first + 3,
                                        MS2ST(WriteTimeoutMSec));
+            }
+            else
+            {
+                if (result.second == Impl::SampleResult::Idle)
+                {
+                    ::usleep(100000);
+                }
+                else if (result.second == Impl::SampleResult::VariablesNotAvailable)
+                {
+                    ::usleep(1000);         // This delay defines the tracer start-up latency
+                }
+                else
+                {
+                    assert(false);          // Should not happen
+                }
             }
         }
     }
@@ -131,10 +142,11 @@ public:
         (void) this->start(thread_priority);
     }
 
-    void trace(const NameList& names)
+    void trace(const NameList& names, const bool complete_sampling_required = false)
     {
         os::MutexLocker locker(mutex_);
         tracer_.stop();
+        tracer_.setCompleteSamplingRequired(complete_sampling_required);
         for (auto n : names)
         {
             if (!n.isEmpty())

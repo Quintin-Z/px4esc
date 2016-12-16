@@ -229,6 +229,10 @@ class SerialReader:
         if not line:
             return False
 
+        # FIXME HACK splitting lines terminated with CR - needs proper handling!
+        if '\r~' in line:
+            line = line[line.rfind('\r~')+1:]
+
         if not line.startswith('~'):
             raw_handler(line)
         else:

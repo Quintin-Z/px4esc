@@ -47,7 +47,6 @@ class FluxLinkageTask : public ISubTask
 
     Const initial_Uq_;
 
-    Scalar started_at_ = -1.0F;
     Status status_ = Status::InProgress;
 
     std::array<math::CumulativeAverageComputer<>, 3> averagers_;
@@ -79,8 +78,10 @@ public:
                     const MotorParameters& initial_parameters) :
         context_(context),
         result_(initial_parameters),
+
         initial_Uq_((initial_parameters.max_current * context.params.motor_id.fraction_of_max_current) *
                     result_.rs * 1.5F),
+
         modulator_(result_.lq,
                    result_.rs,
                    result_.max_current,
@@ -88,6 +89,7 @@ public:
                    context.board.pwm,
                    Modulator::DeadTimeCompensationPolicy::Disabled,
                    Modulator::CrossCouplingCompensationPolicy::Disabled),
+
         currents_filter_(Vector<2>::Zero()),
         Ud_filter_(0.0F),
 
@@ -114,7 +116,52 @@ public:
         }
     }
 
-    void onMainIRQ(Const, const board::motor::Status&) override { }
+    void onMainIRQ(Const period, const board::motor::Status&) override
+    {
+        if (status_ != Status::InProgress)
+        {
+            return;
+        }
+
+        AbsoluteCriticalSectionLocker locker;  // I don't think it is strictly necessary, but it makes the code safer
+
+        if (Udq_[1] <= MinVoltage)
+        {
+            // Voltage is not in the valid range, aborting
+            status_ = Status::Failed;
+            result_.phi = 0;
+            IRQDebugOutputBuffer::setStringPointerFromIRQ("Voltage below the minimum");
+            return;
+        }
+
+        // Accelerating until we've reached the target angular velocity
+        if (angular_velocity_ < context_.params.motor_id.phi_estimation_electrical_angular_velocity)
+        {
+            angular_velocity_ += (context_.params.motor_id.phi_estimation_electrical_angular_velocity /
+                                  (VoltageSlopeLengthSec / 2.0F)) * period;
+        }
+        else
+        {
+            // Reducing voltage
+            Udq_[1] -= (initial_Uq_ / VoltageSlopeLengthSec) * period;
+
+            // Updating best Phi estimate
+            if (Idq_[1] < min_Iq_)
+            {
+                min_Iq_ = Idq_[1];
+                result_.phi = phi_;
+            }
+
+            // Sanity checking
+            if (result_.phi < 0.0F)
+            {
+                // Negative Phi value encountered at any point indicates that the Rs value is likely too high
+                status_ = Status::Failed;
+                IRQDebugOutputBuffer::setStringPointerFromIRQ("Negative Phi, Rs is likely too high");
+                return;
+            }
+        }
+    }
 
     void onNextPWMPeriod(const Vector<2>& phase_currents_ab, Const inverter_voltage) override
     {
@@ -123,17 +170,11 @@ public:
             return;
         }
 
-        if (started_at_ < 0)
-        {
-            started_at_ = context_.getTime();
-        }
-
         /*
          * Voltage modulation and filter update
          */
         Const low_pass_filter_innovation = context_.board.pwm.period * 10.0F;
 
-        if (Udq_[1] > MinVoltage)
         {
             Modulator::Setpoint setpoint;
             setpoint.mode = Modulator::Setpoint::Mode::Uq;
@@ -155,14 +196,6 @@ public:
             Ud_filter_.update(out.reference_Udq[0]);
             Udq_[0] += low_pass_filter_innovation * (Ud_filter_.getValue() - Udq_[0]);
         }
-        else
-        {
-            // Voltage is not in the valid range, aborting
-            result_.phi = 0;
-            status_ = Status::Failed;
-            IRQDebugOutputBuffer::setStringPointerFromIRQ("Voltage below the minimum");
-            return;
-        }
 
         Const I_norm = Idq_.norm();
 
@@ -170,7 +203,7 @@ public:
             (Iprime_estimator_.update(I_norm) / context_.board.pwm.period - Iprime_);
 
         /*
-         * Phi computation (only if spinning fast enough to avoid division by zero)
+         * Running Phi computation (only if spinning fast enough to avoid division by zero)
          */
         if (angular_velocity_ > 1.0F)
         {
@@ -180,51 +213,24 @@ public:
         }
 
         /*
-         * Acceleration/measurement
+         * Stall detection - must be updated at every PWM period!
          */
-        if (angular_velocity_ < context_.params.motor_id.phi_estimation_electrical_angular_velocity)
+        if (angular_velocity_ >= context_.params.motor_id.phi_estimation_electrical_angular_velocity)
         {
-            // Acceleration
-            angular_velocity_ += (context_.params.motor_id.phi_estimation_electrical_angular_velocity /
-                                  (VoltageSlopeLengthSec / 2.0F)) * context_.board.pwm.period;
-        }
-        else
-        {
-            if (Idq_[1] < min_Iq_)
+            if ((Iprime_ > 0.0F) &&
+                (Iprime_stdev_estimator_.getNumSamples() > MinSamplesBeforeStallDetectionEnabled) &&
+                ((Iprime_ - Iprime_mean_) > (Iprime_stdev_ * StallDetectionCurrentRateStdevMultiplier)))
             {
-                min_Iq_ = Idq_[1];
-                result_.phi = phi_;
+                status_ = Status::Succeeded;
             }
 
-            if (result_.phi >= 0.0F)
+            // Current change rate statistical analysis
+            // It is important to update the statistics AFTER the stall detection has been performed!
+            Iprime_stdev_estimator_.addSample(Iprime_);
+            if (Iprime_stdev_estimator_.areEstimatesAvailable())
             {
-                // Stall detection
-                if ((Iprime_ > 0.0F) &&
-                    (Iprime_stdev_estimator_.getNumSamples() > MinSamplesBeforeStallDetectionEnabled) &&
-                    ((Iprime_ - Iprime_mean_) > (Iprime_stdev_ * StallDetectionCurrentRateStdevMultiplier)))
-                {
-                    status_ = Status::Succeeded;
-                }
-                else
-                {
-                    // Minimum is not reached yet, continuing to reduce voltage
-                    Udq_[1] -= (initial_Uq_ / VoltageSlopeLengthSec) * context_.board.pwm.period;
-
-                    // Current change rate statistical analysis
-                    // It is important to update the statistics AFTER the stall detection has been performed!
-                    Iprime_stdev_estimator_.addSample(Iprime_);
-                    if (Iprime_stdev_estimator_.areEstimatesAvailable())
-                    {
-                        Iprime_mean_ = Iprime_stdev_estimator_.getMean();
-                        Iprime_stdev_ = Iprime_stdev_estimator_.getStandardDeviation();
-                    }
-                }
-            }
-            else
-            {
-                // Negative Phi value encountered at any point indicates that the Rs value is likely too high
-                status_ = Status::Failed;
-                IRQDebugOutputBuffer::setStringPointerFromIRQ("Negative Phi, resistance measurement is likely invalid");
+                Iprime_mean_ = Iprime_stdev_estimator_.getMean();
+                Iprime_stdev_ = Iprime_stdev_estimator_.getStandardDeviation();
             }
         }
     }

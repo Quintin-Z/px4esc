@@ -223,7 +223,7 @@ public:
 template <unsigned WindowLength, typename T>
 class RollingSampleVariance
 {
-    T window_[WindowLength]{};
+    T window_[WindowLength];
 
     T mean_sum_ = T(0);
     T squared_mean_sum_ = T(0);
@@ -292,6 +292,11 @@ public:
     T getStandardDeviation() const
     {
         return std::sqrt(getVariance());
+    }
+
+    bool areEstimatesAvailable() const
+    {
+        return current_depth_ > 1;
     }
 };
 

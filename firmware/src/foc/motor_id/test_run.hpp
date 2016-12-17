@@ -45,62 +45,6 @@ class TestRunTask : public ISubTask
      */
     using Modulator = ThreePhaseVoltageModulator<>;
 
-    class StallDetector
-    {
-        static constexpr unsigned WindowLength = 100;
-        static constexpr unsigned NumSamplesToSuppressAfterStepChange = WindowLength / 2;
-        static constexpr Scalar StdevThresholdMultiplier = 10.0F;
-
-        math::RollingSampleVariance<100, Scalar> stdev_estimator_;
-
-        math::FivePointDifferentiator<Scalar> I_derivative_;
-        math::FivePointDifferentiator<Scalar> I_second_derivative_;
-
-        Scalar I_filtered_ = 0;
-        unsigned remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
-
-        Scalar computeSecondDerivativeOfCurrent(Const period, Const current)
-        {
-            // We don't actually need any particular units, but A/s is easier to work with than any arbitrary units
-            return I_second_derivative_.update(I_derivative_.update(current) / period) / period;
-        }
-
-    public:
-        bool update(Const period, const Vector<2> Idq, const bool expect_step_change)
-        {
-            if (expect_step_change)
-            {
-                remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
-            }
-
-            I_filtered_ += period * 10.0F * (Idq.norm() - I_filtered_);
-
-            Const I_prime_prime_clipped = std::max(0.0F, computeSecondDerivativeOfCurrent(period, I_filtered_));
-
-            stdev_estimator_.update(I_prime_prime_clipped);
-
-            if (remaining_suppressed_samples_ > 0)
-            {
-                remaining_suppressed_samples_--;
-                return false;
-            }
-            else
-            {
-                Const threshold = stdev_estimator_.getStandardDeviation() * StdevThresholdMultiplier;
-                return I_prime_prime_clipped > threshold;
-            }
-        }
-
-        void reset()
-        {
-            stdev_estimator_.reset();
-            I_derivative_.reset();
-            I_second_derivative_.reset();
-            I_filtered_ = 0.0F;
-            remaining_suppressed_samples_ = NumSamplesToSuppressAfterStepChange;
-        }
-    } stall_detector_;
-
     SubTaskContextReference context_;
     const MotorParameters result_;
 
@@ -146,16 +90,6 @@ public:
         if (status_ != Status::InProgress)
         {
             return;
-        }
-
-        // TODO this is temporary
-        {
-            AbsoluteCriticalSectionLocker locker;   // Accessing shared data, lock is required
-
-            if (stall_detector_.update(period, latest_modulator_output_.Idq, false))
-            {
-                status_ = Status::Failed;
-            }
         }
 
         // TODO this is temporary

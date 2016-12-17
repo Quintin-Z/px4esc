@@ -99,22 +99,27 @@ struct Parameters
     /// Electrical angular velocity used for magnetic flux linkage identification, radian/second
     Scalar phi_estimation_electrical_angular_velocity = 300.0F;
 
+    Scalar stall_detection_current_stdev_multiplier = 5.0F;
+
 
     bool isValid() const
     {
         return math::Range<>(0.01F, 1.0F).contains(fraction_of_max_current) &&
                math::Range<>(10.0F, 100000.0F).contains(current_injection_frequency) &&
-               math::Range<>(10.0F, 10000.0F).contains(phi_estimation_electrical_angular_velocity);
+               math::Range<>(10.0F, 10000.0F).contains(phi_estimation_electrical_angular_velocity) &&
+               math::Range<>(3.0F, 20.0F).contains(stall_detection_current_stdev_multiplier);
     }
 
     auto toString() const
     {
         return os::heapless::format("FracI: %.0f %%\n"
                                     "Finj : %.1f Hz\n"
-                                    "Wphi : %.1f rad/s",
+                                    "Wphi : %.1f rad/s\n"
+                                    "SDCSM: %.1f",
                                     double(fraction_of_max_current * 100.0F),
                                     double(current_injection_frequency),
-                                    double(phi_estimation_electrical_angular_velocity));
+                                    double(phi_estimation_electrical_angular_velocity),
+                                    double(stall_detection_current_stdev_multiplier));
     }
 };
 

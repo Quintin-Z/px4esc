@@ -76,6 +76,7 @@ using Default = foc::motor_id::Parameters;
 Real g_frac_of_max_current("mid.max_cur_frac",  Default().fraction_of_max_current,                     0.1F,    1.0F);
 Real g_high_frequency     ("mid.hifreq_hertz",  Default().current_injection_frequency,               100.0F, 5000.0F);
 Real g_phi_eradsec        ("mid.phi_eradsec",   Default().phi_estimation_electrical_angular_velocity, 50.0F, 5000.0F);
+Real g_staldt_thres       ("mid.staldt_thres",  Default().stall_detection_current_stdev_multiplier,    4.0F,   10.0F);
 
 }
 
@@ -153,9 +154,10 @@ foc::Parameters readFOCParameters()
     }
     {
         using namespace motor_id;
-        out.motor_id.fraction_of_max_current = g_frac_of_max_current.get();
-        out.motor_id.current_injection_frequency = g_high_frequency.get();
+        out.motor_id.fraction_of_max_current                    = g_frac_of_max_current.get();
+        out.motor_id.current_injection_frequency                = g_high_frequency.get();
         out.motor_id.phi_estimation_electrical_angular_velocity = g_phi_eradsec.get();
+        out.motor_id.stall_detection_current_stdev_multiplier   = g_staldt_thres.get();
         assert(out.motor_id.isValid());
     }
     {
@@ -195,6 +197,7 @@ void writeFOCParameters(const foc::Parameters& obj)
         assign(g_frac_of_max_current,       obj.motor_id.fraction_of_max_current);
         assign(g_high_frequency,            obj.motor_id.current_injection_frequency);
         assign(g_phi_eradsec,               obj.motor_id.phi_estimation_electrical_angular_velocity);
+        assign(g_staldt_thres,              obj.motor_id.stall_detection_current_stdev_multiplier);
     }
 
     {

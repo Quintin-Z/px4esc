@@ -38,7 +38,6 @@ class FluxLinkageTask : public ISubTask
     static constexpr Scalar VoltageSlopeLengthSec                       = 40.0F;
     static constexpr Scalar MinVoltage                                  = 0.001F;
     static constexpr unsigned MinSamplesBeforeStallDetectionEnabled     = 10000;
-    static constexpr Scalar StallDetectionCurrentRateStdevMultiplier    = 5.0F;     // Make configurable?
 
     using Modulator = ThreePhaseVoltageModulator<>;
 
@@ -217,9 +216,11 @@ public:
          */
         if (angular_velocity_ >= context_.params.motor_id.phi_estimation_electrical_angular_velocity)
         {
+            Const threshold = Iprime_stdev_ * context_.params.motor_id.stall_detection_current_stdev_multiplier;
+
             if ((Iprime_ > 0.0F) &&
                 (Iprime_stdev_estimator_.getNumSamples() > MinSamplesBeforeStallDetectionEnabled) &&
-                ((Iprime_ - Iprime_mean_) > (Iprime_stdev_ * StallDetectionCurrentRateStdevMultiplier)))
+                ((Iprime_ - Iprime_mean_) > threshold))
             {
                 status_ = Status::Succeeded;
             }

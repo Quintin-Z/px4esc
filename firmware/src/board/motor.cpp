@@ -130,6 +130,8 @@ public:
         smoothed_duration_ += SmoothingInnovationWeight * (duration - smoothed_duration_);
     }
 
+    const float& getSmoothedDuration() const { return smoothed_duration_; }
+
     auto toString() const
     {
         float worst = 0;
@@ -169,9 +171,11 @@ IRQTimingStatistics g_irq_timing_stat_main;
 /*
  * Tracing probes
  */
-variable_tracer::ProbeGroup<3> g_probes("Vinv", &g_inverter_voltage,
+variable_tracer::ProbeGroup<5> g_probes("Vinv", &g_inverter_voltage,
                                         "Ia",   &g_phase_currents[0],
-                                        "Ib",   &g_phase_currents[1]);
+                                        "Ib",   &g_phase_currents[1],
+                                        "IRQF", &g_irq_timing_stat_fast.getSmoothedDuration(),
+                                        "IRQM", &g_irq_timing_stat_main.getSmoothedDuration());
 
 
 void initPWM(const double pwm_frequency,

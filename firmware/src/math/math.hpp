@@ -301,6 +301,63 @@ public:
 };
 
 /**
+ * Simple sample variance algorithm.
+ */
+template <typename T, typename SampleCounterType = std::uint32_t>
+class SampleVariance
+{
+    SampleCounterType n_ = 0U;
+    T mean_ = T(0);
+    T m2_ = T(0);
+
+public:
+    void addSample(const T x)
+    {
+        n_++;
+
+        const T d = x - mean_;
+        mean_ += d / T(n_);
+
+        const T d2 = x - mean_;
+        m2_ += d * d2;
+    }
+
+    T getMean() const
+    {
+        if (n_ > 0)
+        {
+            return mean_;
+        }
+
+        assert(false);
+        return T(0);
+    }
+
+    T getVariance() const
+    {
+        if (n_ > 1)
+        {
+            return std::max<T>(T(0), m2_ / T(n_ - 1U));
+        }
+
+        assert(false);
+        return T(0);
+    }
+
+    T getStandardDeviation() const
+    {
+        return std::sqrt(getVariance());
+    }
+
+    SampleCounterType getNumSamples() const { return n_; }
+
+    bool areEstimatesAvailable() const
+    {
+        return n_ > 1;
+    }
+};
+
+/**
  * Standard one dimensional five point stencil numerical differentiation algorithm.
  */
 template <typename T>

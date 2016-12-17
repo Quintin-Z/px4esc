@@ -35,8 +35,10 @@ namespace motor_id
 class FluxLinkageTask : public ISubTask
 {
     // Voltage reduction during the measurement phase shold be very slow in order to reduce phase delay of the filters.
-    static constexpr Scalar VoltageSlopeLengthSec       = 40.0F;
-    static constexpr Scalar MinVoltage                  = 0.001F;
+    static constexpr Scalar VoltageSlopeLengthSec                       = 40.0F;
+    static constexpr Scalar MinVoltage                                  = 0.001F;
+    static constexpr unsigned MinSamplesBeforeStallDetectionEnabled     = 10000;
+    static constexpr Scalar StallDetectionCurrentRateStdevMultiplier    = 5.0F;     // Make configurable?
 
     using Modulator = ThreePhaseVoltageModulator<>;
 
@@ -63,7 +65,14 @@ class FluxLinkageTask : public ISubTask
     Vector<2> Udq_ = Vector<2>::Zero();
     Scalar phi_ = 0;
 
-    variable_tracer::ProbeGroup<6> probes_;
+    // Rotor stall detection logic
+    math::FivePointDifferentiator<Scalar> Iprime_estimator_;
+    math::SampleVariance<Scalar> Iprime_stdev_estimator_;
+    Scalar Iprime_ = 0;
+    Scalar Iprime_mean_ = 0;
+    Scalar Iprime_stdev_ = 0;
+
+    variable_tracer::ProbeGroup<9> probes_;
 
 public:
     FluxLinkageTask(SubTaskContextReference context,
@@ -87,7 +96,10 @@ public:
                 "Id",   &Idq_[0],
                 "Iq",   &Idq_[1],
                 "AVel", &angular_velocity_,
-                "phi",  &phi_)
+                "phi",  &phi_,
+                "miIp", &Iprime_,
+                "miIm", &Iprime_mean_,
+                "miIs", &Iprime_stdev_)
     {
         Udq_[1] = initial_Uq_;
 
@@ -116,11 +128,11 @@ public:
             started_at_ = context_.getTime();
         }
 
-        Const prev_I = Idq_.norm();
-
         /*
          * Voltage modulation and filter update
          */
+        Const low_pass_filter_innovation = context_.board.pwm.period * 10.0F;
+
         if (Udq_[1] > MinVoltage)
         {
             Modulator::Setpoint setpoint;
@@ -134,8 +146,6 @@ public:
                                                         setpoint);
             context_.setPWM(out.pwm_setpoint);
             angular_position_ = out.extrapolated_angular_position;
-
-            Const low_pass_filter_innovation = context_.board.pwm.period * 10.0F;
 
             // Current filter update
             currents_filter_.update(out.Idq);
@@ -154,12 +164,17 @@ public:
             return;
         }
 
+        Const I_norm = Idq_.norm();
+
+        Iprime_ += low_pass_filter_innovation *
+            (Iprime_estimator_.update(I_norm) / context_.board.pwm.period - Iprime_);
+
         /*
          * Phi computation (only if spinning fast enough to avoid division by zero)
          */
         if (angular_velocity_ > 1.0F)
         {
-            Const new_phi = (Udq_.norm() - Idq_.norm() * result_.rs) / angular_velocity_;
+            Const new_phi = (Udq_.norm() - I_norm * result_.rs) / angular_velocity_;
 
             phi_ += context_.board.pwm.period * (new_phi - phi_);
         }
@@ -183,15 +198,10 @@ public:
 
             if (result_.phi >= 0.0F)
             {
-                Const dIdt = (Idq_.norm() - prev_I) / context_.board.pwm.period;
-
-                // TODO: we could automatically learn the worst case di/dt after the acceleration phase?
-                // 2 - triggers false positive
-                // 3 - works fine
-                // 6 - works fine
-                Const dIdt_threshold = prev_I * 4.0F;
-
-                if (dIdt > dIdt_threshold)
+                // Stall detection
+                if ((Iprime_ > 0.0F) &&
+                    (Iprime_stdev_estimator_.getNumSamples() > MinSamplesBeforeStallDetectionEnabled) &&
+                    ((Iprime_ - Iprime_mean_) > (Iprime_stdev_ * StallDetectionCurrentRateStdevMultiplier)))
                 {
                     status_ = Status::Succeeded;
                 }
@@ -199,6 +209,15 @@ public:
                 {
                     // Minimum is not reached yet, continuing to reduce voltage
                     Udq_[1] -= (initial_Uq_ / VoltageSlopeLengthSec) * context_.board.pwm.period;
+
+                    // Current change rate statistical analysis
+                    // It is important to update the statistics AFTER the stall detection has been performed!
+                    Iprime_stdev_estimator_.addSample(Iprime_);
+                    if (Iprime_stdev_estimator_.areEstimatesAvailable())
+                    {
+                        Iprime_mean_ = Iprime_stdev_estimator_.getMean();
+                        Iprime_stdev_ = Iprime_stdev_estimator_.getStandardDeviation();
+                    }
                 }
             }
             else

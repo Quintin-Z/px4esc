@@ -56,8 +56,9 @@ Observer::Observer(const Parameters& parameters,
     // Filter state
     P_(parameters.P0),
 
-    probes_("oId", &x_[0],
-            "oIq", &x_[1])
+    probes_("oId",  &x_[0],
+            "oIq",  &x_[1],
+            "oAVe", &x_[StateIndexAngularVelocity])
 {
     assert(std::isfinite(phi_));
     assert(std::isfinite(ld_));

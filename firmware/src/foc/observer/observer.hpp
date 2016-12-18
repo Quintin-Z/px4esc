@@ -137,7 +137,7 @@ class Observer
     Vector<4> x_ = Vector<4>::Zero();
     Matrix<4, 4> P_;
 
-    variable_tracer::ProbeGroup<2> probes_;
+    variable_tracer::ProbeGroup<3> probes_;
 
 public:
     Observer(const Parameters& parameters,

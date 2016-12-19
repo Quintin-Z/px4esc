@@ -298,6 +298,11 @@ public:
     {
         return current_depth_ > 1;
     }
+
+    bool isFirstWindowComplete() const
+    {
+        return current_depth_ >= WindowLength;
+    }
 };
 
 /**
@@ -347,6 +352,13 @@ public:
     T getStandardDeviation() const
     {
         return std::sqrt(getVariance());
+    }
+
+    void reset()
+    {
+        n_ = 0U;
+        mean_ = T(0);
+        m2_ = T(0);
     }
 
     SampleCounterType getNumSamples() const { return n_; }

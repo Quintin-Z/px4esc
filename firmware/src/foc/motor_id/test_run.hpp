@@ -32,12 +32,119 @@ namespace foc
 namespace motor_id
 {
 /**
+ * Simple rotor stall detection logic
+ */
+class TestRunStallDetector
+{
+    const MotorParameters m_;
+
+    math::FivePointDifferentiator<Scalar> Iq_gradient_estimator_;
+    math::FivePointDifferentiator<Scalar> vp_estimator_;
+    math::FivePointDifferentiator<Scalar> vp2_estimator_;
+    math::SampleVariance<Scalar> vp2_variance_estimator_;
+
+    Scalar v_ = 0;
+    Scalar vp_ = 0;
+    Scalar vp2_ = 0;
+    Scalar vp2_stdev_ = 0;
+
+    Scalar remaining_suppression_time_ = 0;
+    bool suppressed_ = false;
+
+    bool stall_ = false;
+
+    variable_tracer::ProbeGroup<3> probes_;
+
+public:
+    // trace -c time AVel sdA2 sdAs sdSD
+    TestRunStallDetector(const MotorParameters& motor_params) :
+        m_(motor_params),
+        probes_("sdA2", &vp2_,
+                "sdAs", &vp2_stdev_,
+                "sdSD", &stall_)
+    { }
+
+    void update(Const period, const Vector<2>& Idq, const Vector<2>& Udq)
+    {
+        if (suppressed_)
+        {
+            remaining_suppression_time_ -= period;
+            if (remaining_suppression_time_ <= 0.0F && !stall_)
+            {
+                suppressed_ = false;
+            }
+        }
+
+        Const lowpass_innovation = period * 10.0F;
+
+        // Ang vel update
+        // TODO Ask Dmitry to document the theory behind this equation
+        Const Iq_prime = Iq_gradient_estimator_.update(Idq[1]) / period;
+        Const new_output = std::abs((Udq[1] - m_.rs * Idq[1] - m_.lq * Iq_prime) / (m_.lq * Idq[0] + m_.phi));
+        v_ += lowpass_innovation * (new_output - v_);
+
+        // Ang vel derivatives update
+        vp_ += lowpass_innovation * (vp_estimator_.update(v_) / period - vp_);
+
+        vp2_ += lowpass_innovation * (vp2_estimator_.update(vp_) / period - vp2_);
+
+        // Stall detection BEFORE statistics is updated
+        if (vp2_variance_estimator_.getNumSamples() > 10000)
+        {
+            // Assuming that v'' has zero mean - for the second derivative it should hold
+            stall_ = std::abs(vp2_) > (vp2_stdev_ * 6.0F);     // TODO: configurable
+        }
+        else
+        {
+            stall_ = false;
+        }
+
+        // Statistics update must be performed AFTER stall detection
+        vp2_variance_estimator_.addSample(vp2_);
+        if (vp2_variance_estimator_.areEstimatesAvailable())
+        {
+            vp2_stdev_ = vp2_variance_estimator_.getStandardDeviation();
+        }
+    }
+
+    void expectFalsePositiveAhead(Const eta = 1.0F)
+    {
+        remaining_suppression_time_ = eta;
+        suppressed_ = true;
+    }
+
+    bool isStallDetected() const
+    {
+        return suppressed_ ? false : stall_;
+    }
+
+    void reset()
+    {
+        Iq_gradient_estimator_.reset();
+        vp_estimator_.reset();
+        vp2_estimator_.reset();
+        vp2_variance_estimator_.reset();
+
+        v_          = 0;
+        vp_         = 0;
+        vp2_        = 0;
+        vp2_stdev_  = 0;
+
+        remaining_suppression_time_ = 0;
+        suppressed_ = false;
+        stall_ = false;
+    }
+};
+
+/**
  * This task spins the motor in open loop under various conditions.
  * The variables observed during its execution can be used to identify parameters of the motor off-line.
  * Variables can be observed and recorded in real time using the existing variable tracing facility.
  */
 class TestRunTask : public ISubTask
 {
+    static constexpr Scalar MaxElectricalAngularVelocity = 4500.0F;     ///< [rad/sec]
+
     /**
      * Note that we're using default settings of the three phase modulator.
      * It is important to use same settings that are used in normal operating mode,
@@ -48,6 +155,10 @@ class TestRunTask : public ISubTask
     SubTaskContextReference context_;
     const MotorParameters result_;
 
+    Const min_stable_angular_velocity_;
+
+    Scalar remaining_delay_ = 0;
+
     Scalar angular_velocity_ = 0;
     Scalar angular_acceleration_ = 0;
 
@@ -55,15 +166,18 @@ class TestRunTask : public ISubTask
     Modulator::Setpoint setpoint_;
     Modulator::Output latest_modulator_output_;
 
+    TestRunStallDetector stall_detector_;
+
     Status status_ = Status::InProgress;
 
-    /// These probes allow the outside world to view the variables of interest in real time
     const variable_tracer::ProbeGroup<5> probes_;
+
 
 public:
     TestRunTask(SubTaskContextReference context, const MotorParameters& result) :
         context_(context),
         result_(result),
+        min_stable_angular_velocity_(result.min_electrical_ang_vel * 2.0F),
 
         modulator_(result.lq,
                    result.rs,
@@ -73,16 +187,21 @@ public:
                    Modulator::DeadTimeCompensationPolicy::Disabled,
                    Modulator::CrossCouplingCompensationPolicy::Disabled),
 
+        setpoint_{0.0F, Modulator::Setpoint::Mode::Iq},
+
+        stall_detector_(result),
+
         probes_("Ud",   &latest_modulator_output_.reference_Udq[0],
                 "Uq",   &latest_modulator_output_.reference_Udq[1],
                 "Id",   &latest_modulator_output_.Idq[0],
                 "Iq",   &latest_modulator_output_.Idq[1],
                 "AVel", &angular_velocity_)
     {
-        // TODO this is temporary
-        angular_acceleration_ = 50.0F;
-        setpoint_.mode = Modulator::Setpoint::Mode::Iq;
-        setpoint_.value = 4.0F;
+        // Model is required for this task
+        if (!result_.isValid())
+        {
+            status_ = Status::Failed;
+        }
     }
 
     void onMainIRQ(Const period, const board::motor::Status&) override
@@ -92,18 +211,64 @@ public:
             return;
         }
 
-        // TODO this is temporary
-        if (angular_velocity_ > 1000.0F)
+        if (remaining_delay_ > 0)
         {
-            angular_acceleration_ *= -1.0F;
+            remaining_delay_ -= period;
+            return;
         }
-        if (angular_velocity_ < -1000.0F)
+
+        Vector<2> Idq;
+        Vector<2> Udq;
+
+        {
+            AbsoluteCriticalSectionLocker locker;
+            Idq = latest_modulator_output_.Idq;
+            Udq = latest_modulator_output_.reference_Udq;
+        }
+
+        stall_detector_.update(period, Idq, Udq);
+
+        if (stall_detector_.isStallDetected())
+        {
+            status_ = Status::Failed;
+        }
+
+        if (angular_velocity_ > 4000.0F)
         {
             status_ = Status::Succeeded;
         }
+        else
+        {
+            angular_acceleration_ = 100.0F;
 
-        setpoint_.value = std::copysign(std::max(0.1F, std::abs(angular_velocity_) * 0.01F), angular_velocity_);
+            if (angular_velocity_ < 1000.0F)
+            {
+                setpoint_.value = 0.5F;
+            }
+            else if (angular_velocity_ < 2000.0F)
+            {
+                if (setpoint_.value < 3.9F)
+                {
+                    stall_detector_.expectFalsePositiveAhead();
+                    setpoint_.value = 4.0F;
+                }
+            }
+            else if (angular_velocity_ < 3000.0F)
+            {
+                if (setpoint_.value < 9.9F)
+                {
+                    stall_detector_.expectFalsePositiveAhead();
+                    setpoint_.value = 10.0F;
+                }
+            }
+            else
+            {
+                setpoint_.value = 1.0F;
+            }
+        }
 
+        // Angular velocity and setpoint update
+        setpoint_.value = std::copysign(setpoint_.value, angular_velocity_);
         angular_velocity_ += angular_acceleration_ * period;
     }
 
@@ -111,6 +276,12 @@ public:
     {
         if (status_ != Status::InProgress)
         {
+            return;
+        }
+
+        if (remaining_delay_ > 0)
+        {
+            latest_modulator_output_ = Modulator::Output();
             return;
         }
 

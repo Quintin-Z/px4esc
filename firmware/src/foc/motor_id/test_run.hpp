@@ -99,6 +99,13 @@ class LinearPatternGenerator : public IPatternGenerator
     template <class T, unsigned N>
     static constexpr unsigned getArraySize(const T (&)[N]) noexcept { return N; }
 
+    void beginNextIteration()
+    {
+        iteration_++;
+        IRQDebugOutputBuffer::setStringPointerFromIRQ("LinearPatternGenerator: Next iteration");
+        IRQDebugOutputBuffer::setVariableFromIRQ<0>(iteration_);
+    }
+
 public:
     LinearPatternGenerator(const MotorParameters& motor) :
         motor_(motor)
@@ -119,34 +126,26 @@ public:
         static const std::function<Scalar (Const)> SetpointTransferFuncs[] =
         {
             // Constant setpoint
-            [](Const) { return 0.10F; },
-            [](Const) { return 0.25F; },
-            [](Const) { return 0.40F; },
-            [](Const) { return 0.55F; },
-            [](Const) { return 0.70F; },
-            [](Const) { return 0.85F; },
-            [](Const) { return 1.00F; },
+            [](Const) { return 0.1F; },
+            [](Const) { return 0.4F; },
+            [](Const) { return 0.7F; },
+            [](Const) { return 1.0F; },
             // Positive rate setpoint
-            [](Const x) { return 0.1F + 0.1F * x; },
-            [](Const x) { return 0.1F + 0.2F * x; },
             [](Const x) { return 0.1F + 0.5F * x; },
-            [](Const x) { return 0.1F + 1.0F * x; },
             [](Const x) { return 0.1F + 2.0F * x; },
             [](Const x) { return 0.1F + 5.0F * x; },
-            [](Const x) { return 0.3F + 0.1F * x; },
             [](Const x) { return 0.3F + 0.5F * x; },
             [](Const x) { return 0.3F + 1.0F * x; },
             // TODO: add squares?
             // Negative rate setpoint
             [](Const x) { return 0.5F - 0.1F * x; },
-            [](Const x) { return 0.6F - 0.2F * x; },
-            [](Const x) { return 0.7F - 0.5F * x; },
+            [](Const x) { return 1.0F - 0.5F * x; },
             [](Const x) { return 1.0F - x; },
             [](Const x) { return 2.0F - x; }
         };
 
         constexpr unsigned NumIterations = getArraySize(MaxAngAccMults) * getArraySize(SetpointTransferFuncs);
-        static_assert(NumIterations > 100, "Woah");
+        static_assert(NumIterations > 10, "Woah");
         if (iteration_ >= NumIterations)
         {
             finished_ = true;
@@ -198,7 +197,7 @@ public:
          */
         if ((abs_angvel >= max_angvel_) || (raw_setpoint < 0.0F))
         {
-            iteration_++;
+            beginNextIteration();
             Output output;
             output.spin_down = true;
             return output;
@@ -222,7 +221,7 @@ public:
         return output;
     }
 
-    void onStallDetected() override { iteration_++; }
+    void onStallDetected() override { beginNextIteration(); }
 
     bool isFinished() const override { return finished_; }
 };
@@ -406,8 +405,8 @@ public:
 class Task : public ISubTask
 {
     static constexpr Scalar MaxElectricalAngularVelocity    = 5000.0F;     ///< [rad/sec]
-    static constexpr Scalar DelayBetweenPatterns            = 10.0F;
-    static constexpr Scalar DelayAfterSpinDown              = 5.0F;
+    static constexpr Scalar DelayBetweenPatterns            = 30.0F;
+    static constexpr Scalar DelayAfterSpinDown              = 15.0F;
 
     /**
      * Note that we're using default settings of the three phase modulator.
@@ -506,8 +505,6 @@ public:
                 stall_detector_.reset();
                 resetModulator();
                 remaining_delay_ = DelayAfterSpinDown;
-
-                IRQDebugOutputBuffer::setStringPointerFromIRQ("Spindown completed");
             }
             else
             {

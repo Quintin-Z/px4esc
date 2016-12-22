@@ -28,6 +28,9 @@ except ImportError:
 
 from pyqtgraph import PlotWidget, mkPen, InfiniteLine
 
+NO_GUI = '--nogui' in sys.argv
+if NO_GUI:
+    sys.argv.remove('--nogui')
 
 if len(sys.argv) > 1:
     SER_PORT = sys.argv[1]
@@ -288,6 +291,8 @@ class CLIInputReader(threading.Thread):
 
 def value_handler(x, values, names):
     dumper.add(x, values, names)
+    if NO_GUI:
+        return
     for val, name in zip(values, names):
         try:
             scale = VARIABLE_SCALING[name]
@@ -302,20 +307,23 @@ def value_handler(x, values, names):
 
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = Window()
-
     reader = SerialReader(SER_PORT, SER_BAUDRATE)
-
-    poll_timer = QTimer(window)
-    poll_timer.setSingleShot(False)
-    # noinspection PyUnresolvedReferences
-    poll_timer.timeout.connect(lambda: reader.process_queued_data(value_handler, lambda s: print(s.rstrip())))
-    poll_timer.start(10)
-
     dumper = FileDumpWriter()
-
     cli = CLIInputReader(lambda line: reader._port.write((line + '\r\n').encode()))
 
-    window.show()
-    exit(app.exec_())
+    if NO_GUI:
+        while True:
+            time.sleep(0.001)
+            reader.process_queued_data(value_handler, lambda s: print(s.rstrip()))
+    else:
+        app = QApplication(sys.argv)
+        window = Window()
+
+        poll_timer = QTimer(window)
+        poll_timer.setSingleShot(False)
+        # noinspection PyUnresolvedReferences
+        poll_timer.timeout.connect(lambda: reader.process_queued_data(value_handler, lambda s: print(s.rstrip())))
+        poll_timer.start(10)
+
+        window.show()
+        exit(app.exec_())

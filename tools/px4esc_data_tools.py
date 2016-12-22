@@ -5,14 +5,13 @@
 
 import os
 import sys
+import json
 import numpy
 import math
 import matplotlib.pyplot as plt
 from logging import getLogger
 
 logger = getLogger(__name__)
-
-DATA_PATH = ['.', '~', '../serial_plot']
 
 
 def amap(f, x):
@@ -44,71 +43,53 @@ def find_index(fn, container):
             return i
 
 
-def load_data(name):
-    for dp in DATA_PATH:
-        fn = os.path.expanduser(os.path.join(dp, name + '.log'))
-        # noinspection PyBroadException
-        try:
-            with open(fn, encoding='utf8') as f:
-                return f.read()
-        except Exception:
-            continue
-    raise Exception('Data file %r not found in %r' % (name, DATA_PATH))
-
-
-def load_trace_samples(data) -> list:
+def iter_trace_samples(data):
     """
     Loads real-time tracing data from text file. Each line may contain either comments or encoded data sample.
     If the line starts with '{' (left curly brace), it is assumed to contain encoded sample, otherwise it will be
     ignored. The samples are encoded in YAML or Python literal dict format (for this purpose, these two formats are
     identical and interchangeable).
-    :param data:                either name of the data file or its contents
-    :return:                    list of samples, where each sample is a dict of the form {variable: value}
+    :param data:                path to the data file
+    :return:                    generator of samples, where each sample is a dict of the form {variable: value}
     """
-    if isinstance(data, bytes):
-        data = data.decode()
-
-    if len(data) < 1024 and '\n' not in data:
-        data = load_data(data)
-
-    items = []
-    for line_index, ln in enumerate(data.split('\n')):
-        if len(ln) < 1 or ln[0] != '{':
-            continue
-        try:
-            sample = eval(ln)
-            if not isinstance(sample, dict):
-                raise ValueError('Sample is not dict')
-            if 'time' not in sample:
-                raise ValueError('Sample has no timestamp')
-            items.append(sample)
-        except Exception as ex:
-            raise ValueError('Parsing error at line %d: %r' % (line_index + 1, ln)) from ex
-
-    return items
+    # TODO: add support for packed files (raw Base85 encoded traces)
+    with open(data, encoding='utf8') as f:
+        for line_index, ln in enumerate(f):
+            if len(ln) < 1 or ln[0] != '{':
+                continue
+            try:
+                # We used to use this approach:
+                # sample = ast.literal_eval(ln)
+                # but it turned out to be 5 times slower than JSON. YAML is about 12 times slower than JSON!
+                # Speed matters because the trace files can be several gigabytes large!
+                sample = json.loads(ln.replace("'", '"'))
+                if not isinstance(sample, dict):
+                    raise ValueError('Sample is not dict')
+                if 'time' not in sample:
+                    raise ValueError('Sample has no timestamp')
+                yield sample
+            except Exception as ex:
+                raise ValueError('Parsing error at line %d: %r' % (line_index + 1, ln)) from ex
 
 
-def extract_contiguous_sequences_where_all_variables_are_available(samples, variables):
+def iter_contiguous_sequences_where_all_variables_are_available(samples, variables):
     var_set = set(variables)
     if 'time' in var_set:
         raise ValueError('Time trace cannot be used in this context')
     if len(var_set) < 1:
         raise ValueError('Variable set cannot be empty')
 
-    output_sequences = []
     current_sequence = []
     for s in samples:
         if var_set.issubset(set(s.keys())):
             current_sequence.append(s)
         else:
             if len(current_sequence) > 0:
-                output_sequences.append(current_sequence)
+                yield current_sequence
             current_sequence = []
 
-    return output_sequences
 
-
-def transform_trace_samples(samples: list) -> dict:
+def transform_trace_samples(samples) -> dict:
     """
     This function rearranges the data and returns a dict of sample sets, where each sample set contains an N-by-2
     matrix, where N is the number of samples in the set; the first column contains timestamps, and the second column
@@ -125,6 +106,7 @@ def transform_trace_samples(samples: list) -> dict:
                        [ 10258.26260085],
                        [ 10258.26282085], ...
     """
+    samples = list(samples)
     return {
         field: amap(lambda x: numpy.array([float(x['time']), x[field]]
                                           if field != 'time' else
@@ -139,7 +121,7 @@ def transform_trace_samples(samples: list) -> dict:
 
 def rescale_trace(trace, scale):
     """
-    Helper function for easy rescaling of traces produced by load_trace_samples(). Usage:
+    Helper function for easy rescaling of traces produced by iter_trace_samples(). Usage:
     >>> rescale_trace(trace['phi'], 1e3)
     This function preserves shape of the input data. Obviously, rescaling does not affect the timestamp information.
     """
@@ -305,8 +287,7 @@ def print_stderr(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    samples = load_trace_samples('latest_data')
-    decoded = transform_trace_samples(samples)
+    decoded = transform_trace_samples(iter_trace_samples(os.path.expanduser('~/latest_data.log')))
     print(decoded.keys())
     for k, v in decoded.items():
         print(k, v.shape)
@@ -315,7 +296,9 @@ if __name__ == '__main__':
 
     vars = ['Ud', 'Uq', 'AVel']
     print('Contiguous sequences for variables:', vars)
-    for seq in extract_contiguous_sequences_where_all_variables_are_available(samples, vars):
+    for seq in iter_contiguous_sequences_where_all_variables_are_available(
+            iter_trace_samples(os.path.expanduser('~/latest_data.log')),
+            vars):
         print(seq[0]['time'], seq[-1]['time'], len(seq))
 
     plot([decoded['Ud']], [decoded['AVel']], save_to_file='test')

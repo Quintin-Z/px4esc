@@ -129,7 +129,6 @@ public:
             [](Const) { return 0.1F; },
             [](Const) { return 0.4F; },
             [](Const) { return 0.7F; },
-            [](Const) { return 1.0F; },
             // Positive rate setpoint
             [](Const x) { return 0.1F + 0.5F * x; },
             [](Const x) { return 0.1F + 2.0F * x; },
@@ -405,8 +404,8 @@ public:
 class Task : public ISubTask
 {
     static constexpr Scalar MaxElectricalAngularVelocity    = 5000.0F;     ///< [rad/sec]
-    static constexpr Scalar DelayBetweenPatterns            = 30.0F;
-    static constexpr Scalar DelayAfterSpinDown              = 15.0F;
+    static constexpr Scalar DelayBetweenPatterns            = 60.0F;
+    static constexpr Scalar DelayAfterSpinDown              = 30.0F;
 
     /**
      * Note that we're using default settings of the three phase modulator.

@@ -180,7 +180,7 @@ class MotorIdentificationTask : public ITask
     , ResistanceTask
     , InductanceTask
     , FluxLinkageTask
-    , TestRunTask
+    , test_run::Task
     > sequencer_;
 
     bool started_ = false;
@@ -227,7 +227,7 @@ public:
             }
             case Mode::TestRun:
             {
-                sequencer_.setSequence<TestRunTask>();
+                sequencer_.setSequence<test_run::Task>();
                 break;
             }
             default:

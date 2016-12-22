@@ -139,8 +139,7 @@ public:
             // Negative rate setpoint
             [](Const x) { return 0.5F - 0.1F * x; },
             [](Const x) { return 1.0F - 0.5F * x; },
-            [](Const x) { return 1.0F - x; },
-            [](Const x) { return 2.0F - x; }
+            [](Const x) { return 1.0F - x; }
         };
 
         constexpr unsigned NumIterations = getArraySize(MaxAngAccMults) * getArraySize(SetpointTransferFuncs);

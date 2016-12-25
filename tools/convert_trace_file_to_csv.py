@@ -12,8 +12,6 @@ except IndexError:
 
 keys = vtd.list_variable_names_in_file(input_file)
 print('Variables:', list(keys), file=sys.stderr)
-
-keys = list(sorted(keys))
 print(','.join(keys))
 
 

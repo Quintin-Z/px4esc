@@ -17,7 +17,7 @@ import datetime
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))  # Adding outer directory
 
-import variable_trace_decoder.decoder as trace_decoder
+import variable_trace_decoder as vtd
 from high_throughput_serial_port import SerialPort
 
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QApplication, QMainWindow, QAction

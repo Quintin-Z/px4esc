@@ -5,10 +5,6 @@
 
 import numpy as np
 import math
-import matplotlib.pyplot as plt
-from logging import getLogger
-
-logger = getLogger(__name__)
 
 
 def amap(f, x):
@@ -65,6 +61,8 @@ def plot(left_plots,
      - [y...]
     If X values are not provided, indexes of the Y values will be used instead.
     """
+    import matplotlib.pyplot as plt
+
     if right_plots is None:
         right_plots = []
 

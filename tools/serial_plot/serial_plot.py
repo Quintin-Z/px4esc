@@ -13,6 +13,7 @@ import threading
 import time
 import glob
 import queue
+import datetime
 import trace_decoder
 from high_throughput_serial_port import SerialPort
 
@@ -199,21 +200,25 @@ class FileDumpWriter(threading.Thread):
         self.start()
 
     def run(self):
-        max_x = 0
         while True:
-            x, values, names = self._q.get()
-            if (x < max_x) or not self._f:
-                if self._f:
-                    self._f.close()
-                self._f = open('latest_data.log', 'w', encoding='utf8')
-                self._f.write('Started at %.6f real\n' % time.time())
-            max_x = max(max_x, x)
-            sample = dict(zip(names, values))
-            sample['time'] = x
-            self._f.write('%s\n' % sample)
+            try:
+                text = self._q.get(timeout=1)
+            except queue.Empty:
+                if self._f is not None:
+                    self._f.flush()
+                continue
 
-    def add(self, x, values, names):
-        self._q.put((x, values, names))
+            if isinstance(text, str):
+                text = text.encode('utf8')
+
+            if not self._f:
+                name = 'cli.%s.log' % datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+                self._f = open(name, 'wb')
+
+            self._f.write(text)
+
+    def add(self, text):
+        self._q.put(text)
 
 
 class SerialReader:
@@ -224,16 +229,20 @@ class SerialReader:
         8: trace_decoder.Fields.FLOAT64
     }
 
-    def __init__(self, port, baudrate):
+    def __init__(self, port, baudrate, dumper):
         self._port = SerialPort(port, baudrate)
         self._format = None
         self._names = None
         self._timestamp_index = 0
+        self._dumper = dumper
 
     def poll(self, value_handler, raw_handler):
-        line = self._port.readline(timeout=1e-3).decode('latin1')
+        line = self._port.readline(timeout=1e-3)
         if not line:
             return False
+        self._dumper.add(line)
+
+        line = line.decode('latin1')
 
         # FIXME HACK splitting lines terminated with CR - needs proper handling!
         if '\r~' in line:
@@ -241,8 +250,10 @@ class SerialReader:
 
         if not line.startswith('~'):
             raw_handler(line)
-        else:
+
+        elif not NO_GUI:
             line = line[1:].rstrip()
+
             if line[0] == '\t':
                 vs = [x.split('/') for x in line.split()]
                 self._names = [x[0] for x in vs]
@@ -250,6 +261,7 @@ class SerialReader:
                 del self._names[self._timestamp_index]
                 self._format = ''.join(self.DEFAULT_SIZE_TO_FORMAT_MAP[int(x[1])] for x in vs)
                 print(self._names, self._timestamp_index, self._format, file=sys.stderr)
+
             elif self._format is not None:
                 # Recovering the latest sample if multiple lines were erroneously joined together
                 line = line.split('~')[-1]
@@ -261,10 +273,14 @@ class SerialReader:
                 ts = values[self._timestamp_index]
                 del values[self._timestamp_index]
                 value_handler(ts, values, self._names)
+
             else:
                 pass    # We missed the sample format declaration, let's wait for the next one
 
-        return True
+            return True
+
+        else:
+            return True
 
     def process_queued_data(self, value_handler, raw_handler):
         try:
@@ -290,9 +306,6 @@ class CLIInputReader(threading.Thread):
 
 
 def value_handler(x, values, names):
-    dumper.add(x, values, names)
-    if NO_GUI:
-        return
     for val, name in zip(values, names):
         try:
             scale = VARIABLE_SCALING[name]
@@ -307,8 +320,8 @@ def value_handler(x, values, names):
 
 
 if __name__ == '__main__':
-    reader = SerialReader(SER_PORT, SER_BAUDRATE)
     dumper = FileDumpWriter()
+    reader = SerialReader(SER_PORT, SER_BAUDRATE, dumper)
     cli = CLIInputReader(lambda line: reader._port.write((line + '\r\n').encode()))
 
     if NO_GUI:

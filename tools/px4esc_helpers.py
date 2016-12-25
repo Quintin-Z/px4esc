@@ -30,6 +30,38 @@ def running_mean(x, n):
                        np.ones((n,)) / n, mode='valid')
 
 
+def downsample(source, ratio):
+    """
+    :param source:  an iterable, possibly a generator, with the input numerical data, scalar or vector
+    :param ratio:   downsampling ratio, must be larger than or equal 1; non-integers are allowed
+    :return:        a generator that yields averaged downsampled values
+    """
+    if ratio < 1:
+        raise ValueError('Invalid downsampling ratio %r' % ratio)
+
+    # It is possible to use numpy for this, but we'd like to support generators properly
+    # See this: http://stackoverflow.com/questions/20322079/downsample-a-1d-numpy-array
+    # Also the current approach supports non-integer ratios
+    a, n = None, 0
+    ratio_counter = 0
+
+    for s in source:
+        if a is None:
+            a, n = s, 1
+        else:
+            a += s
+            n += 1
+
+        ratio_counter += 1
+        if ratio_counter >= ratio:
+            ratio_counter -= ratio
+            yield a / n
+            a, n = None, 0
+
+    if a is not None and n > 0:
+        yield a / n             # Trailing residuals
+
+
 def find_index(fn, container):
     for i, x in enumerate(container):
         if fn(x):
@@ -177,6 +209,12 @@ def plot_kalman_filter_states(time_stamps, filter_states, state_indexes, scale=1
 
 
 if __name__ == '__main__':
+    demo_x = np.linspace(0, 10, 10000)
+    demo_y = np.sin(demo_x)
+    demo_x_downsampled = list(downsample(demo_x, 1000))
+    demo_y_downsampled = list(downsample(demo_y, 1000))
+    plot([(demo_x, demo_y), (demo_x_downsampled, demo_y_downsampled)], save_to_file='downsample')
+
     demo_ts = np.linspace(0, 10, 10000)
     demo_plots = np.sin(demo_ts) * 0.1, np.cos(demo_ts) * 100 - 1000
 

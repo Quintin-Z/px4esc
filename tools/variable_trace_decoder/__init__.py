@@ -115,16 +115,71 @@ def list_variable_names_in_file(path):
     return list(sorted(ret, key=lambda x: ' ' if x == TIMESTAMP_VARIABLE_NAME else x))
 
 
-def iter_matrices(samples, variables):
+def iter_matrices(samples, variables, max_time_delta=None, dtype=np.float64):
     """
     This function accepts an iterable of samples and the list of variables of interest, and returns a generator of
     matrices of size SxV, where S is the number of samples in the sequence, and V is the number of variables.
     It is advised to always keep 'time' as the first variable, for compatibility reasons.
-    :param samples:     an iterable of tracing sample; each sample is a dict {name: value}
-    :param variables:   list of variable names; it is advised to always use 'time' as the first variable
-    :return:            an iterable of NumPy matrices
+    :param samples:         an iterable of tracing samples; each sample is a dict {name: value}
+    :param variables:       list of variable names; it is advised to always use 'time' as the first variable
+    :param max_time_delta:  if this or larger time delta is encountered, matrix split will occur
+    :param dtype:           data type of the output matrices; default is float64
+    :return:                an iterable of NumPy matrices
     """
     if len(variables) < 1:
         raise ValueError('Variable set cannot be empty')
 
-    raise NotImplementedError('Fix me')
+    if max_time_delta is not None:
+        if max_time_delta <= 0:
+            raise ValueError('Invalid max time delta: %r' % max_time_delta)
+
+        if TIMESTAMP_VARIABLE_NAME not in variables:
+            raise ValueError('Time variable is not requested, but max time delta is defined')
+
+    try:
+        timestamp_variable_index = variables.index(TIMESTAMP_VARIABLE_NAME)
+    except ValueError:
+        timestamp_variable_index = None
+
+    variable_set = set(variables)
+    m_cols = len(variables)
+
+    # This value defines the trade-off between peak memory consumption and speed.
+    # 2000000 samples * 8 bytes per value (float64) * 8 variables /1024/1024 =~ 122 megabytes per increment
+    num_rows_increment = 2000000
+
+    m = np.empty((num_rows_increment, m_cols), dtype=dtype)
+    m_rows = 0
+
+    def done():
+        nonlocal m_rows
+        if m_rows > 0:
+            yield np.resize(m, (m_rows, m_cols))    # Yielding a COPY of the matrix! This is paramount.
+            m_rows = 0                              # The original matrix is not resized down - we'll keep using it
+
+    for s in samples:
+        if not variable_set.issubset(s.keys()):
+            yield from done()
+            assert m_rows == 0
+            continue
+
+        row = tuple(s[v] for v in variables)
+
+        if (max_time_delta is not None) and (m_rows > 0):
+            prev_ts = m[m_rows - 1, timestamp_variable_index]
+            new_ts = row[timestamp_variable_index]
+            if (new_ts - prev_ts) > max_time_delta:
+                yield from done()
+                assert m_rows == 0
+
+        try:
+            m[m_rows, :] = row
+        except IndexError:
+            logger.debug('iter_matrices(): Resizing the temp matrix %r', m.shape)
+            m = np.resize(m, (m_rows + num_rows_increment, m_cols))     # Relocation takes a lot of memory and time
+            m[m_rows, :] = row
+
+        m_rows += 1
+
+    yield from done()
+    assert m_rows == 0

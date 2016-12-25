@@ -7,7 +7,7 @@
 
 import numpy as np
 from logging import getLogger
-from .sample_decoder import Fields, decode_sample
+from .codec import Fields, decode_sample
 
 
 TIMESTAMP_VARIABLE_NAME = 'time'

@@ -225,65 +225,31 @@ class FileDumpWriter(threading.Thread):
 
 
 class SerialReader:
-    DEFAULT_SIZE_TO_FORMAT_MAP = {
-        1: trace_decoder.Fields.UINT8,
-        2: trace_decoder.Fields.UINT16,
-        4: trace_decoder.Fields.FLOAT32,
-        8: trace_decoder.Fields.FLOAT64
-    }
-
     def __init__(self, port, baudrate, dumper):
         self._port = SerialPort(port, baudrate)
-        self._format = None
-        self._names = None
-        self._timestamp_index = 0
+        self._decoder = vtd.Decoder()
         self._dumper = dumper
 
     def poll(self, value_handler, raw_handler):
         line = self._port.readline(timeout=1e-3)
         if not line:
             return False
+
         self._dumper.add(line)
 
-        line = line.decode('latin1')
-
-        # FIXME HACK splitting lines terminated with CR - needs proper handling!
-        if '\r~' in line:
-            line = line[line.rfind('\r~')+1:]
-
-        if not line.startswith('~'):
-            raw_handler(line)
-
-        elif not NO_GUI:
-            line = line[1:].rstrip()
-
-            if line[0] == '\t':
-                vs = [x.split('/') for x in line.split()]
-                self._names = [x[0] for x in vs]
-                self._timestamp_index = self._names.index('time')
-                del self._names[self._timestamp_index]
-                self._format = ''.join(self.DEFAULT_SIZE_TO_FORMAT_MAP[int(x[1])] for x in vs)
-                print(self._names, self._timestamp_index, self._format, file=sys.stderr)
-
-            elif self._format is not None:
-                # Recovering the latest sample if multiple lines were erroneously joined together
-                line = line.split('~')[-1]
-                try:
-                    values = list(trace_decoder.decode_sample(self._format, line))
-                except Exception as ex:
-                    raise Exception('Sample decoding failed on %r (%s)' % (line, ex))
-                assert len(values) == len(self._names) + 1
-                ts = values[self._timestamp_index]
-                del values[self._timestamp_index]
-                value_handler(ts, values, self._names)
-
-            else:
-                pass    # We missed the sample format declaration, let's wait for the next one
-
-            return True
-
+        if NO_GUI:
+            if not line.startswith(b'~'):
+                raw_handler(line.decode('latin1'))
         else:
-            return True
+            sample = self._decoder.process_line(line)
+            if sample:
+                ts = sample['time']
+                del sample['time']
+                value_handler(ts, sample)
+            else:
+                raw_handler(line.decode('latin1'))
+
+        return True
 
     def process_queued_data(self, value_handler, raw_handler):
         try:
@@ -308,8 +274,8 @@ class CLIInputReader(threading.Thread):
                 print('CLI input poll failed:', ex)
 
 
-def value_handler(x, values, names):
-    for val, name in zip(values, names):
+def value_handler(x, sample):
+    for name, val in sample.items():
         try:
             scale = VARIABLE_SCALING[name]
             val *= scale

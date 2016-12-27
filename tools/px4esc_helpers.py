@@ -6,6 +6,11 @@
 import numpy as np
 import math
 import typing
+import copy
+from logging import getLogger
+
+
+logger = getLogger(__name__)
 
 
 def amap(f, x):
@@ -48,7 +53,7 @@ def downsample(source, ratio):
 
     for s in source:
         if a is None:
-            a, n = s, 1
+            a, n = copy.deepcopy(s), 1
         else:
             a += s
             n += 1
@@ -230,17 +235,24 @@ class Plot:
 
         return plot_right
 
-    def _finalize(self, size_px):
+    def _finalize(self, size_px, dpi):
+        dpi = 100 if dpi is None else dpi       # Larger DPI --> Larger fonts
         if size_px is not None:
-            one_size_fits_all_dpi = 70                  # Larger DPI --> Larger fonts
-            self._fig.set_dpi(one_size_fits_all_dpi)
-            self._fig.set_size_inches(size_px[0] / one_size_fits_all_dpi,
-                                      size_px[1] / one_size_fits_all_dpi)
+            self._fig.set_dpi(dpi)
+            self._fig.set_size_inches(size_px[0] / dpi,
+                                      size_px[1] / dpi)
 
-        self._fig.tight_layout(rect=self._tight_layout_rect)
+        # noinspection PyBroadException
+        try:
+            # Matplotlib sometimes mysteriously fails to perform tight_layout(), e.g. like:
+            # ValueError: left cannot be >= right
+            # See this: http://stackoverflow.com/questions/22708888
+            self._fig.tight_layout(rect=self._tight_layout_rect)
+        except Exception:
+            logger.error('Plot: tight_layout() failed', exc_info=True)
 
-    def save(self, name, size_px=None):
-        self._finalize(size_px)
+    def save(self, name, size_px=None, dpi=None):
+        self._finalize(size_px, dpi)
         if not isinstance(name, str):
             name = str(name)
             if '.' in name:
@@ -248,8 +260,8 @@ class Plot:
 
         self._fig.savefig(name, dpi='figure')
 
-    def show(self, size_px=None):
-        self._finalize(size_px)
+    def show(self, size_px=None, dpi=None):
+        self._finalize(size_px, dpi)
         self._fig.show()
 
 

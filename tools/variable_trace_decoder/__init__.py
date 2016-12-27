@@ -17,7 +17,7 @@ logger = getLogger(__name__)
 
 class Decoder:
     """
-    Trace files require a stateful parser.
+    Tracing streams require a stateful parser.
     """
     DEFAULT_VARIABLE_SIZE_TO_FIELD_TYPE_MAP = {
         1: Fields.INT8,
@@ -115,7 +115,7 @@ def list_variable_names_in_file(path):
     return list(sorted(ret, key=lambda x: ' ' if x == TIMESTAMP_VARIABLE_NAME else x))
 
 
-def iter_matrices(samples, variables, max_time_delta=None, dtype=np.float64):
+def iter_batches(samples, variables, max_time_delta=None, dtype=np.float64):
     """
     This function accepts an iterable of samples and the list of variables of interest, and returns a generator of
     matrices of size SxV, where S is the number of samples in the sequence, and V is the number of variables.
@@ -146,7 +146,8 @@ def iter_matrices(samples, variables, max_time_delta=None, dtype=np.float64):
 
     # This value defines the trade-off between peak memory consumption and speed.
     # 2000000 samples * 8 bytes per value (float64) * 8 variables /1024/1024 =~ 122 megabytes per increment
-    num_rows_increment = 2000000
+    # 5000000 samples * 8 bytes per value (float64) * 8 variables /1024/1024 =~ 305 megabytes per increment
+    num_rows_increment = 5000000
 
     m = np.empty((num_rows_increment, m_cols), dtype=dtype)
     m_rows = 0
@@ -175,7 +176,7 @@ def iter_matrices(samples, variables, max_time_delta=None, dtype=np.float64):
         try:
             m[m_rows, :] = row
         except IndexError:
-            logger.debug('iter_matrices(): Resizing the temp matrix %r', m.shape)
+            logger.debug('iter_batches(): Resizing the temp matrix %r', m.shape)
             m = np.resize(m, (m_rows + num_rows_increment, m_cols))     # Relocation takes a lot of memory and time
             m[m_rows, :] = row
 

@@ -84,7 +84,8 @@ def plot(left_plots,
          title=None,
          x_label=None,
          y_labels=None,
-         save_to_file=None):
+         save_to_file=None,
+         size_pixels=None):
     """
     A convenience wrapper over matplotlib's pyplot features.
     Supported data formats for each element of the lists left_plots and right_plots:
@@ -93,7 +94,7 @@ def plot(left_plots,
      - [y...]
     If X values are not provided, indexes of the Y values will be used instead.
     """
-    import matplotlib.pyplot as plt
+    import matplotlib.pyplot
 
     if right_plots is None:
         right_plots = []
@@ -103,9 +104,15 @@ def plot(left_plots,
     if len(y_labels) not in (0, 1, 2):
         raise ValueError('Invalid set of Y labels: %r' % y_labels)
 
-    fig = plt.figure()
+    fig = matplotlib.pyplot.figure()
     if title:
         fig.suptitle(title, fontweight='bold')
+
+    if size_pixels is not None:
+        one_size_fits_all_dpi = 70          # Larger DPI --> Larger fonts!
+        fig.set_dpi(one_size_fits_all_dpi)
+        fig.set_size_inches(size_pixels[0] / one_size_fits_all_dpi,
+                            size_pixels[1] / one_size_fits_all_dpi)
 
     ax1 = fig.add_subplot(111)
     if len(left_plots) > len(colors) or len(right_plots) > len(colors):
@@ -172,7 +179,7 @@ def plot(left_plots,
             if '.' in save_to_file:
                 save_to_file += '.png'
 
-        fig.savefig(save_to_file)
+        fig.savefig(save_to_file, dpi='figure')
     else:
         fig.show()
 
@@ -220,6 +227,7 @@ if __name__ == '__main__':
 
     plot([np.matrix([demo_ts, demo_plots[0]]).T],
          [np.matrix([demo_ts, demo_plots[1]])],
+         size_pixels=(2000, 800),
          save_to_file='test')
 
     class KalmanStub:
